@@ -1,7 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
-
-#include <string.h>
+#include "../utility.h"
 
 #define BUFFER_LEN 256
 
@@ -13,6 +10,7 @@ int main(int argc, char** argv) {
     fprintf(stderr, "usage: %s udp_hostname udp_port\n", argv[0]);
     return -1;
   }
+  // read in the required arguments
   strncpy(hostname, argv[1], BUFFER_LEN - 1);
   port = atoi(argv[2]);
   

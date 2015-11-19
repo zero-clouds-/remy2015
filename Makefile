@@ -11,8 +11,8 @@ LDLIBS=-lm
 
 all: robot_server robot_client
 
-$(SOBJ):$(wildcard server/*.h) Makefile
-$(COBJ):$(wildcard client/*.h) Makefile
+$(SOBJ):$(wildcard server/*.h *.h) Makefile
+$(COBJ):$(wildcard client/*.h *.h) Makefile
 
 robot_server: $(SOBJ)
 	$(LINK.c) $^ $(LDLIBS) -o $@
