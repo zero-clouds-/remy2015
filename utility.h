@@ -6,11 +6,6 @@
 
 #include <string.h>
 
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <arpa/inet.h>
-
 // print an error message and quit
 void error(char const* message) {
   fprintf(stderr, "error: %s\n", message);
@@ -33,6 +28,9 @@ buffer* create_buffer(int size) {
 void delete_buffer(buffer* b) {
   free(b->data);
   free(b);
+}
+void clear_buffer(buffer* b) {
+  b->len = 0;
 }
 void append_buffer(buffer* b, unsigned char const* str, int len) {
   if (b->len + len > b->size) {
