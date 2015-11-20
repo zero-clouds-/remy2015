@@ -1,8 +1,11 @@
 #include "../utility.h"
 #include "../udp_protocol.h"
 
-#define ROBOT_PORT 8081
-#define BUFFER_LEN 512
+#define IMAGE_PORT  8081
+#define GPS_PORT    8082
+#define LASERS_PORT 8083
+#define dGPS_PORT   8084
+#define BUFFER_LEN  512
 
 // connects to the specified host and returns the socket identifier
 int tcp_connect(char const* server_name, int port) {
@@ -45,7 +48,7 @@ int udp_server(char const* port_name) {
 
 int main(int argc, char** argv) {
   int i, id, port;
-  int http_sock, udp_sock;
+  int http_sock[4], udp_sock;
   char hostname[BUFFER_LEN];
   hostname[0] = '\0';
   if (argc < 4) {
@@ -57,12 +60,20 @@ int main(int argc, char** argv) {
   strncpy(hostname, argv[2], BUFFER_LEN - 1);
   port = atoi(argv[3]);
   // set up the sockets
-  http_sock = tcp_connect(hostname, port);
-  udp_sock = udp_server(argv[3]);
+  http_sock[1] = tcp_connect(hostname, IMAGE_PORT);
+  http_sock[2] = tcp_connect(hostname, GPS_PORT);
+  http_sock[3] = tcp_connect(hostname, LASERS_PORT);
+  http_sock[4] = tcp_connect(hostname, dGPS_PORT);
+  udp_sock = udp_server(port);
   // execution loop
   unsigned char recv_buf[BUFFER_LEN];
   for (;;) {
-    
+    // listen on udp socket
+
+    // decipher message
+    //   check 0-3 bytes for version
+    //   check 4-7 for password = 0
+    //   check 8-11 for connect
   }
   return 0;
 }
