@@ -1,5 +1,5 @@
-#include "../utility.h"
-#include "../udp_protocol.h"
+#include "../protocol/utility.h"
+#include "../protocol/udp_protocol.h"
 
 #define IMAGE_PORT  8081
 #define GPS_PORT    8082

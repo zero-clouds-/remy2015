@@ -1,22 +1,10 @@
-#ifndef UTILITY_H
-#define UTILITY_H
-
-#include <stdio.h>
-#include <stdlib.h>
-
-#include <string.h>
+#include "utility.h"
 
 // print an error message and quit
 void error(char const* message) {
   fprintf(stderr, "error: %s\n", message);
   exit(-1);
 }
-
-// basic self-resizing buffer with utility functions
-typedef struct buffer_t {
-  int size, len;
-  unsigned char* data;
-} buffer;
 
 buffer* create_buffer(int size) {
   buffer* b = (buffer*)malloc(sizeof(buffer));
@@ -37,7 +25,7 @@ void resize_buffer(buffer* b, int size) {
   unsigned char* temp = (unsigned char*)malloc(size * sizeof(unsigned char));
   memcpy(temp, b->data, b->len * sizeof(unsigned char));
   free(b->data);
-  b->data - temp;
+  b->data = temp;
   b->size = size;
 }
 void append_buffer(buffer* b, unsigned char const* str, int len) {
@@ -51,5 +39,3 @@ void write_buffer(buffer* b, char const* filename) {
   fwrite(b->data, sizeof(unsigned char), b->len, fp);
   fclose(fp);
 }
-
-#endif
