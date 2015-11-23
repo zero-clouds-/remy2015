@@ -185,5 +185,5 @@ int check_pass(const header* msg_header, uint32_t pass) {
 }
 
 uint32_t get_command(const header* msg_header) {
-    return msg_header->data[3];
+    return msg_header->data[2];
 }
