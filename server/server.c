@@ -21,8 +21,6 @@
 #define TURN        64
 #define STOP        128
 
-enum http_port {image, gps, lasers, dgps};
-
 typedef struct robot_info {
     int id;
     int http_sock[4]; // 0 = image, 1 = GPS/move/turn/stop, 2 = Lasers, 3 = dGPS
@@ -84,16 +82,11 @@ int check_pass(const header* msg_header, uint32_t pass);
 uint32_t get_command(const header* msg_header);
 ssize_t udp_send(buffer* recv_buffer, server_stat* status);
 void quit(buffer* recv_buf, server_stat* status);
-void request_image(buffer* recv_buf, server_stat* status);
-void request_gps(buffer* recv_buf, server_stat* status);
-void request_lasers(buffer* recv_buf, server_stat* status);
-void request_dgps(buffer* recv_buf, server_stat* status);
-void request_move(buffer* recv_buf, header msg_header, server_stat* status);
-void request_turn(buffer* recv_buf, header msg_header, server_stat* status);
-void request_stop(buffer* recv_buf, server_stat* status);
+void request_command(buffer* recv_buf, server_stat* status);
+int http_get_content_length(char* http_msg);
+unsigned char* http_get_data(char* http_msg);
 
 int main(int argc, char** argv) {
-    int i;
     server_stat status;
     char *port, hostname[BUFFER_LEN];
     hostname[0] = '\0';
@@ -186,26 +179,8 @@ void protocol1(buffer* recv_buf, server_stat* status){
                 case QUIT:
                     quit(recv_buf, status);
                     break;
-                case IMAGE:
-                    request_image(recv_buf, status);
-                    break;
-                case GPS:
-                    request_gps(recv_buf, status);
-                    break;
-                case dGPS:
-                    request_dgps(recv_buf, status);
-                    break;
-                case LASERS:
-                    request_lasers(recv_buf, status);
-                    break;
-                case MOVE:
-                    request_move(recv_buf, msg_header, status);
-                    break;
-                case TURN:
-                    request_turn(recv_buf, msg_header, status);
-                    break;
-                case STOP:
-                    request_stop(recv_buf, status);
+                case IMAGE || GPS || dGPS || LASERS || MOVE || TURN || STOP:
+                    request_command(recv_buf, status);
                     break;
                 default:
                     printf("invalid command\n");
@@ -280,77 +255,139 @@ void quit(buffer* recv_buf, server_stat* status) {
  * Requests image from the robot
  * Forwards data from robot to client
  */
-void request_image(buffer* recv_buf, server_stat* status) {
-    char http_message[1000];
-    int n;
+void request_command(buffer* recv_buf, server_stat* status) {
+    char http_message[1000]; // used to hold http message from robot
+    unsigned char* data;     // points to the data section of http_message
+    unsigned char* itr;      // iterator pointing to beginning of next data section to be sent to client
+    int n, content_len;      // length of the http data section
+    header request_header;   // header from the client
+    header response_header;  // header for messages to the client
+    buffer* response;        // buffer to send to client
+    int socket;              // index for which status.r_stat.http_sock[] to use
 
     printf("requesting image\n");
+    
+    // acknowledgement of command to client
     udp_send(recv_buf, status);
-    strncpy(http_message, "GET /snapshot?topic=/robot_11/image?width=600?height=500 HTTP/1.1\r\n\r\n", 50);
-    write(status->r_stat.http_sock[image], http_message, strlen(http_message));
+    request_header = extract_header(recv_buf);
 
-    n = read(status->r_stat.http_sock[image], http_message, 1000);
+    // create the http request
+    switch (request_header.data[UP_CLIENT_REQUEST]) {
+        case IMAGE:
+            strncpy(http_message, "GET /snapshot?topic=/robot_11/image?width=600?height=500 HTTP/1.1\r\n\r\n", 50);
+            socket = IMAGE_PORT;
+            break;
+        case GPS:
+            strncpy(http_message, "GET /state?id=abrogate2 HTTP/1.1\r\n\r\n", 50);
+            socket = GPS_PORT;
+            break;
+        case LASERS:
+            strncpy(http_message, "GET /state?id=abrogate2 HTTP/1.1\r\n\r\n", 50);
+            socket = LASERS_PORT;
+            break;
+        case dGPS:
+            strncpy(http_message, "GET /state?id=abrogate2 HTTP/1.1\r\n\r\n", 50);
+            socket = dGPS_PORT;
+            break;
+        case MOVE:
+            snprintf(http_message, 50, "GET /state?id=abrogate2&lx=%d HTTP/1.1\r\n\r\n", request_header.data[UP_REQUEST_DATA]);
+            socket = GPS_PORT;
+            break;
+        case TURN:
+            snprintf(http_message, 50, "GET /state?id=abrogate2&az=%d HTTP/1.1\r\n\r\n", request_header.data[UP_REQUEST_DATA]);
+            socket = GPS_PORT;
+            break;
+        case STOP:
+            snprintf(http_message, 50, "GET /state?id=abrogate2&lx=0 HTTP/1.1\r\n\r\n");
+            socket = GPS_PORT;
+            break;
+    }
+
+    
+    // send the http request
+    write(status->r_stat.http_sock[socket], http_message, strlen(http_message));
+
+    // receive a response from the robot
+    n = read(status->r_stat.http_sock[socket], http_message, 1000);
     if (n < 0) {
         fprintf(stderr, "read()\n");
     }
+    
     // decipher http message
-    // if successful, begin sending to client
-    // else failure
-}
-
-// not down here yet. all of this will probably dissapear into a general request_command function
-void request_gps(buffer* recv_buf, server_stat* status) {
-    char http_message[50];
-    printf("requesting gps\n");
-    udp_send(recv_buf, status);
-    strncpy(http_message, "GET /state?id=abrogate2 HTTP/1.1\r\n\r\n", 50);
-    write(status->r_stat.http_sock[1], http_message, strlen(http_message));
-}
-
-void request_lasers(buffer* recv_buf, server_stat* status) {
-    char http_message[50];
-    printf("requesting lasers\n");
-    udp_send(recv_buf, status);
-    strncpy(http_message, "GET /state?id=abrogate2 HTTP/1.1\r\n\r\n", 50);
-    write(status->r_stat.http_sock[2], http_message, strlen(http_message));
-}
-
-void request_dgps(buffer* recv_buf, server_stat* status) {
-    char http_message[50];
-    printf("requesting dgps\n");
-    udp_send(recv_buf, status);
-    strncpy(http_message, "GET /state?id=abrogate2 HTTP/1.1\r\n\r\n", 50);
-    write(status->r_stat.http_sock[3], http_message, strlen(http_message));
-}
-
-void request_move(buffer* recv_buf, header msg_header, server_stat* status) {
-    char http_message[50];
-    printf("moving robot\n");
-    if (msg_header.data[UP_REQUEST_DATA] > 5 || msg_header.data[UP_REQUEST_DATA] < -5) {
-        printf("invalid command\n");
+    char *t = strtok(http_message, " ");
+    t = strtok(NULL, " ");
+    
+    // check for '200 OK'
+    if (atoi(t) != 200) {
+        fprintf(stderr, "error with http\n");
         return;
     }
-    udp_send(recv_buf, status);
-    snprintf(http_message, 50, "GET /state?id=abrogate2&lx=%d HTTP/1.1\r\n\r\n", msg_header.data[3]);
-    write(status->r_stat.http_sock[1], http_message, strlen(http_message));
-}
-
-void request_turn(buffer* recv_buf, header msg_header, server_stat* status) {
-    char http_message[50];
-    printf("turning robot\n");
-    if (msg_header.data[3] > 1 || msg_header.data[3] < -1) {
-        printf("invalid command\n");
-        return;
+    
+    // get length of data section of http message
+    if ((content_len = http_get_content_length(http_message)) != 0) {
+        if ((data = http_get_data(http_message)) == NULL) {
+            fprintf(stderr, "http_get_data()\n");
+        }
     }
-    udp_send(recv_buf, status);
-    snprintf(http_message, 50, "GET /state?id=abrogate2&az=%d HTTP/1.1\r\n\r\n", msg_header.data[3]);
-    write(status->r_stat.http_sock[1], http_message, strlen(http_message));
+
+    // build the header
+    response_header.data[UP_VERSION] = request_header.data[UP_VERSION];
+    response_header.data[UP_IDENTIFIER] = request_header.data[UP_IDENTIFIER];
+    response_header.data[UP_CLIENT_REQUEST] = request_header.data[UP_CLIENT_REQUEST];
+    response_header.data[UP_REQUEST_DATA] = request_header.data[UP_REQUEST_DATA];
+    response_header.data[UP_BYTE_OFFSET] = 0;
+    response_header.data[UP_TOTAL_SIZE] = content_len;
+    response_header.data[UP_PAYLOAD_SIZE] = (content_len - UP_MAX_PAYLOAD) > 0 ? UP_MAX_PAYLOAD:content_len;
+
+    // start sending data
+    response = create_buffer(BUFFER_LEN);
+    itr = (unsigned char*) data;
+    while (content_len > 0) {
+        // adjust the header
+        response_header.data[UP_BYTE_OFFSET] = (itr - data);
+        response_header.data[UP_PAYLOAD_SIZE] = (content_len - UP_MAX_PAYLOAD) > 0 ? UP_MAX_PAYLOAD:content_len;
+
+        
+        // pack the header
+        insert_header(response, response_header);
+
+        // pack the data
+        append_buffer(response, itr, response_header.data[UP_PAYLOAD_SIZE]);
+        
+        // adjust pointer and amount of data left to send
+        itr += response_header.data[UP_PAYLOAD_SIZE];
+        content_len -= response_header.data[UP_PAYLOAD_SIZE];
+        
+        // send to client
+        udp_send(response, status);
+        
+        // clean up
+        clear_buffer(response);
+    }
 }
 
-void request_stop(buffer* recv_buf, server_stat* status) {
-    char http_message[50];
-    printf("stopping robot\n");
-    udp_send(recv_buf, status);
-    strncpy(http_message, "GET /state?id=abrogate2&lx=0 HTTP/1.1\r\n\r\n", 50);
-    write(status->r_stat.http_sock[1], http_message, strlen(http_message));
+/* int http_get_content_length
+ *   char* http_msg - array containing an http response from the robot
+ * Returns the Content-Length field as an integer
+ */
+int http_get_content_length(char* http_msg) {
+    char* t;
+    if ((t = strstr(http_msg, "Content-Length")) != NULL) {
+        strtok(t, " ");
+        return atoi(strtok(NULL, "\r\n"));
+    }
+    return 0;
+}
+
+/* unsigned char* http_get_data
+ *   char* http_msg - array containing an http response from the robot
+ * Returns a pointer to the beginning of the data section of the http_message
+ */
+unsigned char* http_get_data(char* http_msg) {
+    char *t;
+    if ((t = strstr(http_msg, "\r\n\r\n")) != NULL) {
+        t += strlen("\r\n\r\n");
+        return (unsigned char*)t;
+    }
+    return NULL;
 }
