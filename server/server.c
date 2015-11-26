@@ -252,7 +252,7 @@ void quit(buffer* recv_buf, server_stat* status) {
  *   buffer* recv_buffer - buffer containing the message sent by the client to the proxy
  *   server_stat* status - status and general information from the server
  * Sends an acknowledgement to the client
- * Requests image from the robot
+ * Requests "stuff" from the robot
  * Forwards data from robot to client
  */
 void request_command(buffer* recv_buf, server_stat* status) {
@@ -275,31 +275,31 @@ void request_command(buffer* recv_buf, server_stat* status) {
     switch (request_header.data[UP_CLIENT_REQUEST]) {
         case IMAGE:
             strncpy(http_message, "GET /snapshot?topic=/robot_11/image?width=600?height=500 HTTP/1.1\r\n\r\n", 50);
-            socket = IMAGE_PORT;
+            socket = 0;
             break;
         case GPS:
             strncpy(http_message, "GET /state?id=abrogate2 HTTP/1.1\r\n\r\n", 50);
-            socket = GPS_PORT;
+            socket = 1;
             break;
         case LASERS:
             strncpy(http_message, "GET /state?id=abrogate2 HTTP/1.1\r\n\r\n", 50);
-            socket = LASERS_PORT;
+            socket = 2;
             break;
         case dGPS:
             strncpy(http_message, "GET /state?id=abrogate2 HTTP/1.1\r\n\r\n", 50);
-            socket = dGPS_PORT;
+            socket = 3;
             break;
         case MOVE:
             snprintf(http_message, 50, "GET /state?id=abrogate2&lx=%d HTTP/1.1\r\n\r\n", request_header.data[UP_REQUEST_DATA]);
-            socket = GPS_PORT;
+            socket = 1;
             break;
         case TURN:
             snprintf(http_message, 50, "GET /state?id=abrogate2&az=%d HTTP/1.1\r\n\r\n", request_header.data[UP_REQUEST_DATA]);
-            socket = GPS_PORT;
+            socket = 1;
             break;
         case STOP:
             snprintf(http_message, 50, "GET /state?id=abrogate2&lx=0 HTTP/1.1\r\n\r\n");
-            socket = GPS_PORT;
+            socket = 1;
             break;
     }
 
