@@ -1,6 +1,8 @@
 #include "../protocol/utility.h"
 #include "../protocol/udp_protocol.h"
 #include <time.h>
+#include <unistd.h>
+
 // robot ports
 #define IMAGE_PORT  8081
 #define GPS_PORT    8082
@@ -19,11 +21,18 @@
 #define TURN        64
 #define STOP        128
 
+typedef struct robot_info {
+    int id;
+    int http_sock[4]; // 0 = image, 1 = GPS/move/turn/stop, 2 = Lasers, 3 = dGPS
+} robot_stat;
+
 typedef struct serverstatus_info {
     struct sockaddr_in cliaddr;
     socklen_t size;
-    uint16_t password;
-    int connected;
+    uint32_t password;
+    int connected; // 0 not connected, 1 waiting for response, 2 connected
+    int udp_sock;
+    robot_stat r_stat;
 } server_stat;
 
 
@@ -66,37 +75,40 @@ int udp_server(char const* port_name) {
     return sock;
 }
 
-void protocol1(buffer* recv_buffer, server_stat status);
-void protocol2(buffer* recv_buffer, server_stat status);
+void protocol1(buffer* recv_buffer, server_stat* status);
+void protocol2(buffer* recv_buffer, server_stat* status);
 int check_version(const header* msg_header);
 int check_pass(const header* msg_header, uint32_t pass);
 uint32_t get_command(const header* msg_header);
-
+ssize_t udp_send(buffer* recv_buffer, server_stat* status);
+void quit(buffer* recv_buf, server_stat* status);
+void request_command(buffer* recv_buf, server_stat* status);
+int http_get_content_length(char* http_msg);
+unsigned char* http_get_data(char* http_msg);
 
 int main(int argc, char** argv) {
-    int i, id;
-    int http_sock[4], udp_sock;
+    server_stat status;
     char *port, hostname[BUFFER_LEN];
     hostname[0] = '\0';
     if (argc < 4) {
         fprintf(stderr, "usage: %s robot_id http_hostname udp_port\n", argv[0]);
         return -1;
     }
+
     // read in the required arguments
-    id = atoi(argv[1]);
+    status.r_stat.id = atoi(argv[1]);
     strncpy(hostname, argv[2], BUFFER_LEN - 1);
     port = argv[3];
 
     // set up the sockets
-    http_sock[1] = tcp_connect(hostname, IMAGE_PORT);
-    http_sock[2] = tcp_connect(hostname, GPS_PORT);
-    http_sock[3] = tcp_connect(hostname, LASERS_PORT);
-    http_sock[4] = tcp_connect(hostname, dGPS_PORT);
-    udp_sock = udp_server(port);
+    status.r_stat.http_sock[1] = tcp_connect(hostname, IMAGE_PORT);
+    status.r_stat.http_sock[2] = tcp_connect(hostname, GPS_PORT);
+    status.r_stat.http_sock[3] = tcp_connect(hostname, LASERS_PORT);
+    status.r_stat.http_sock[4] = tcp_connect(hostname, dGPS_PORT);
+    status.udp_sock = udp_server(port);
 
     // execution loop
     srand(time(NULL));
-    server_stat status;
     status.size = sizeof(status.cliaddr);
     status.password = rand();
     status.connected = 0;
@@ -104,7 +116,7 @@ int main(int argc, char** argv) {
     for (;;) {
 
         unsigned char temp[BUFFER_LEN];
-        if (recvfrom(udp_sock, temp, BUFFER_LEN, 0,
+        if (recvfrom(status.udp_sock, temp, BUFFER_LEN, 0,
                     (struct sockaddr *)(&status.cliaddr), &status.size) < 0) {
             fprintf(stderr, "recvfrom()\n");
         }
@@ -112,20 +124,44 @@ int main(int argc, char** argv) {
         // decipher message
         append_buffer(recv_buf, temp, strlen((char*)temp));
         header msg_header = extract_header(recv_buf);
-        void (*protocol_func)(buffer*, server_stat);
+
+        // send to correct protocol
+        void (*protocol_func)(buffer*, server_stat*);
         protocol_func = check_version(&msg_header) ? &protocol1:&protocol2;
-        protocol_func(recv_buf, status);
+        protocol_func(recv_buf, &status);
     }
     return 0;
 }
 
-void protocol1(buffer* recv_buf, server_stat status){
+/* void protocol1
+ *   buffer* recv_buffer - buffer containing the message sent by the client to the proxy
+ *   server_stat* status - status and general information from the server
+ * Processes the recv_buf as the class protocol dictates
+ */
+void protocol1(buffer* recv_buf, server_stat* status){
+    // giant mess of conditionals
     fprintf(stdout, "version 1 protocol\n");
     header msg_header = extract_header(recv_buf);
-    if (!status.connected) {
+    if (status->connected == 0) {
         if (check_pass(&msg_header, 0)) {
             if (get_command(&msg_header) == CONNECT) {
                 printf("reply with password\n");
+                status->connected = 1;
+                msg_header.data[1] = status->password;
+                insert_header(recv_buf, msg_header);
+                if (udp_send(recv_buf, status) < 0) {
+                    fprintf(stderr, "sendto()\n");
+                }
+            } else {
+                printf("ignore\n");
+            }
+        } else {
+            printf("ignore\n");
+        }
+    } else if (status->connected == 1) {
+        if (check_pass(&msg_header, status->password)) {
+            if (get_command(&msg_header) == CONNECT) {
+                status->connected = 2;
             } else {
                 printf("ignore\n");
             }
@@ -133,7 +169,7 @@ void protocol1(buffer* recv_buf, server_stat status){
             printf("ignore\n");
         }
     } else {
-        if (!check_pass(&msg_header, status.password)) {
+        if (!check_pass(&msg_header, status->password)) {
             printf("ignore\n");
         } else {
             switch (get_command(&msg_header)) {
@@ -141,28 +177,10 @@ void protocol1(buffer* recv_buf, server_stat status){
                     printf("ignore\n");
                     break;
                 case QUIT:
-                    printf("breaking connection\n");
+                    quit(recv_buf, status);
                     break;
-                case IMAGE:
-                    printf("requesting image\n");
-                    break;
-                case GPS:
-                    printf("requesting gps\n");
-                    break;
-                case dGPS:
-                    printf("requesting dgps\n");
-                    break;
-                case LASERS:
-                    printf("requesting lasers\n");
-                    break;
-                case MOVE:
-                    printf("moving robot\n");
-                    break;
-                case TURN:
-                    printf("turning robot\n");
-                    break;
-                case STOP:
-                    printf("stopping robot\n");
+                case IMAGE || GPS || dGPS || LASERS || MOVE || TURN || STOP:
+                    request_command(recv_buf, status);
                     break;
                 default:
                     printf("invalid command\n");
@@ -172,18 +190,204 @@ void protocol1(buffer* recv_buf, server_stat status){
     }       
 }
 
-void protocol2(buffer* recv_buffer, server_stat status) {
+/* void protocol2
+ *   buffer* recv_buffer - buffer containing the message sent by the client to the proxy
+ *   server_stat* status - status and general information from the server
+ */
+void protocol2(buffer* recv_buffer, server_stat* status) {
     fprintf(stdout, "version 2 protocol\n");
 }
 
+/* int check_version
+ *   const header* msg_header - protocol header
+ * Returns the version identifier of the client message
+ */
 int check_version(const header* msg_header) {
-    return msg_header->data[0] == 0;
+    return msg_header->data[UP_IDENTIFIER] == 0;
 }
 
+/* int check_pass
+ *   const header* msg_header - protocol header
+ * Returns 1 if the password in the header matches the server password
+ * Returns 0 otherwise
+ */
 int check_pass(const header* msg_header, uint32_t pass) {
-    return msg_header->data[1] == pass;
+    return msg_header->data[UP_CLIENT_REQUEST] == pass;
 }
 
+/* uint32_t get_command
+ *   const header* msg_header - protocol header
+ * Returns the command requested by the client
+ */
 uint32_t get_command(const header* msg_header) {
-    return msg_header->data[2];
+    return msg_header->data[UP_REQUEST_DATA];
+}
+
+/* ssize_t udp_send
+ *   buffer* recv_buffer - buffer containing the message sent by the client to the proxy
+ *   server_stat* status - status and general information from the server
+ * Echo's the client's message back to acknowledge its receipt
+ * Returns the number of bytes sent
+ */
+ssize_t udp_send(buffer* recv_buf, server_stat* status) {
+    return sendto(status->udp_sock, recv_buf->data, recv_buf->len, 0,
+                            (struct sockaddr *)(&status->cliaddr), status->size);
+}
+
+/* void quit
+ *   buffer* recv_buffer - buffer containing the message sent by the client to the proxy
+ *   server_stat* status - status and general information from the server
+ * Acknowledges message
+ * Resets password
+ * Resets connection status
+ */
+void quit(buffer* recv_buf, server_stat* status) {
+    printf("breaking connection\n");
+    udp_send(recv_buf, status);
+    status->password = rand();
+    status->connected = 0;
+}
+
+/* void request_image
+ *   buffer* recv_buffer - buffer containing the message sent by the client to the proxy
+ *   server_stat* status - status and general information from the server
+ * Sends an acknowledgement to the client
+ * Requests "stuff" from the robot
+ * Forwards data from robot to client
+ */
+void request_command(buffer* recv_buf, server_stat* status) {
+    char http_message[1000]; // used to hold http message from robot
+    unsigned char* data;     // points to the data section of http_message
+    unsigned char* itr;      // iterator pointing to beginning of next data section to be sent to client
+    int n, content_len;      // length of the http data section
+    header request_header;   // header from the client
+    header response_header;  // header for messages to the client
+    buffer* response;        // buffer to send to client
+    int socket;              // index for which status.r_stat.http_sock[] to use
+
+    printf("requesting image\n");
+    
+    // acknowledgement of command to client
+    udp_send(recv_buf, status);
+    request_header = extract_header(recv_buf);
+
+    // create the http request
+    switch (request_header.data[UP_CLIENT_REQUEST]) {
+        case IMAGE:
+            strncpy(http_message, "GET /snapshot?topic=/robot_11/image?width=600?height=500 HTTP/1.1\r\n\r\n", 50);
+            socket = 0;
+            break;
+        case GPS:
+            strncpy(http_message, "GET /state?id=abrogate2 HTTP/1.1\r\n\r\n", 50);
+            socket = 1;
+            break;
+        case LASERS:
+            strncpy(http_message, "GET /state?id=abrogate2 HTTP/1.1\r\n\r\n", 50);
+            socket = 2;
+            break;
+        case dGPS:
+            strncpy(http_message, "GET /state?id=abrogate2 HTTP/1.1\r\n\r\n", 50);
+            socket = 3;
+            break;
+        case MOVE:
+            snprintf(http_message, 50, "GET /state?id=abrogate2&lx=%d HTTP/1.1\r\n\r\n", request_header.data[UP_REQUEST_DATA]);
+            socket = 1;
+            break;
+        case TURN:
+            snprintf(http_message, 50, "GET /state?id=abrogate2&az=%d HTTP/1.1\r\n\r\n", request_header.data[UP_REQUEST_DATA]);
+            socket = 1;
+            break;
+        case STOP:
+            snprintf(http_message, 50, "GET /state?id=abrogate2&lx=0 HTTP/1.1\r\n\r\n");
+            socket = 1;
+            break;
+    }
+
+    
+    // send the http request
+    write(status->r_stat.http_sock[socket], http_message, strlen(http_message));
+
+    // receive a response from the robot
+    n = read(status->r_stat.http_sock[socket], http_message, 1000);
+    if (n < 0) {
+        fprintf(stderr, "read()\n");
+    }
+    
+    // decipher http message
+    char *t = strtok(http_message, " ");
+    t = strtok(NULL, " ");
+    
+    // check for '200 OK'
+    if (atoi(t) != 200) {
+        fprintf(stderr, "error with http\n");
+        return;
+    }
+    
+    // get length of data section of http message
+    if ((content_len = http_get_content_length(http_message)) != 0) {
+        if ((data = http_get_data(http_message)) == NULL) {
+            fprintf(stderr, "http_get_data()\n");
+        }
+    }
+
+    // build the header
+    response_header.data[UP_VERSION] = request_header.data[UP_VERSION];
+    response_header.data[UP_IDENTIFIER] = request_header.data[UP_IDENTIFIER];
+    response_header.data[UP_CLIENT_REQUEST] = request_header.data[UP_CLIENT_REQUEST];
+    response_header.data[UP_REQUEST_DATA] = request_header.data[UP_REQUEST_DATA];
+    response_header.data[UP_BYTE_OFFSET] = 0;
+    response_header.data[UP_TOTAL_SIZE] = content_len;
+    response_header.data[UP_PAYLOAD_SIZE] = (content_len - UP_MAX_PAYLOAD) > 0 ? UP_MAX_PAYLOAD:content_len;
+
+    // start sending data
+    response = create_buffer(BUFFER_LEN);
+    itr = (unsigned char*) data;
+    while (content_len > 0) {
+        // adjust the header
+        response_header.data[UP_BYTE_OFFSET] = (itr - data);
+        response_header.data[UP_PAYLOAD_SIZE] = (content_len - UP_MAX_PAYLOAD) > 0 ? UP_MAX_PAYLOAD:content_len;
+
+        
+        // pack the header
+        insert_header(response, response_header);
+
+        // pack the data
+        append_buffer(response, itr, response_header.data[UP_PAYLOAD_SIZE]);
+        
+        // adjust pointer and amount of data left to send
+        itr += response_header.data[UP_PAYLOAD_SIZE];
+        content_len -= response_header.data[UP_PAYLOAD_SIZE];
+        
+        // send to client
+        udp_send(response, status);
+        
+        // clean up
+        clear_buffer(response);
+    }
+}
+
+/* int http_get_content_length
+ *   char* http_msg - array containing an http response from the robot
+ * Returns the Content-Length field as an integer
+ */
+int http_get_content_length(char* http_msg) {
+    char* t;
+    if ((t = strstr(http_msg, "Content-Length")) != NULL) {
+        strtok(t, " ");
+        return atoi(strtok(NULL, "\r\n"));
+    }
+    return 0;
+}
+
+/* unsigned char* http_get_data
+ *   char* http_msg - array containing an http response from the robot
+ * Returns a pointer to the beginning of the data section of the http_message
+ */
+unsigned char* http_get_data(char* http_msg) {
+    char *t;
+    if ((t = strstr(http_msg, "\r\n\r\n")) != NULL) {
+        t += strlen("\r\n\r\n");
+        return (unsigned char*)t;
+    }
+    return NULL;
 }
