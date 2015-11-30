@@ -82,23 +82,41 @@ int check_pass(const header* msg_header, uint32_t pass);
 uint32_t get_command(const header* msg_header);
 ssize_t udp_send(buffer* recv_buffer, server_stat* status);
 void quit(buffer* recv_buf, server_stat* status);
-void request_command(buffer* recv_buf, server_stat* status);
+int request_command(buffer* recv_buf, server_stat* status);
 int http_get_content_length(char* http_msg);
 unsigned char* http_get_data(char* http_msg);
 
 int main(int argc, char** argv) {
+    int i, iflag, hflag, pflag;
     server_stat status;
     char *port, hostname[BUFFER_LEN];
     hostname[0] = '\0';
-    if (argc < 4) {
-        fprintf(stderr, "usage: %s robot_id http_hostname udp_port\n", argv[0]);
+    if (argc != 7) {
+        fprintf(stderr, "usage: %s -i <robot_id> -h <http_hostname> -p <udp_port>\n", argv[0]);
         return -1;
     }
 
     // read in the required arguments
-    status.r_stat.id = atoi(argv[1]);
-    strncpy(hostname, argv[2], BUFFER_LEN - 1);
-    port = argv[3];
+    iflag = hflag = pflag = 0;
+    for (i = 1; i < argc; i+=2) {
+        if (strcmp(argv[i], "-i") == 0) {
+            status.r_stat.id = atoi(argv[i + 1]);
+            iflag = 1;
+        } else if (strcmp(argv[i], "-h") == 0) {
+            strncpy(hostname, argv[i + 1], BUFFER_LEN - 1);
+            hflag = 1;
+        } else if (strcmp(argv[i], "-p") == 0) {
+            port = argv[i + 1];
+            pflag = 1;
+        } else {
+            fprintf(stderr, "usage: %s -i <robot_id> -h <http_hostname> -p <udp_port>\n", argv[0]);
+            return -1;
+        }
+    }
+    if (!(iflag && hflag && pflag)) {
+        fprintf(stderr, "usage: %s -i <robot_id> -h <http_hostname> -p <udp_port>\n", argv[0]);
+        return -1;
+    }
 
     // set up the sockets
     status.r_stat.http_sock[1] = tcp_connect(hostname, IMAGE_PORT);
@@ -141,6 +159,7 @@ int main(int argc, char** argv) {
 void protocol1(buffer* recv_buf, server_stat* status){
     // giant mess of conditionals
     fprintf(stdout, "version 1 protocol\n");
+    int error = 0;
     header msg_header = extract_header(recv_buf);
     if (status->connected == 0) {
         if (check_pass(&msg_header, 0)) {
@@ -180,14 +199,20 @@ void protocol1(buffer* recv_buf, server_stat* status){
                     quit(recv_buf, status);
                     break;
                 case IMAGE || GPS || dGPS || LASERS || MOVE || TURN || STOP:
-                    request_command(recv_buf, status);
+                    error = request_command(recv_buf, status);
                     break;
                 default:
-                    printf("invalid command\n");
+                    fprintf(stderr, "error with client request\n");
+                    error = -2;
                     break;
             }
         }
-    }       
+    }
+    if (error == -2) {
+        fprintf(stderr, "invalid client request\n");
+    } else if (error == -1) {
+        fprintf(stderr, "error in http response\n");
+    }
 }
 
 /* void protocol2
@@ -254,8 +279,11 @@ void quit(buffer* recv_buf, server_stat* status) {
  * Sends an acknowledgement to the client
  * Requests "stuff" from the robot
  * Forwards data from robot to client
+ * Returns -2 if error processing client request
+ *         -1 if error in http response
+ *          1 if successful
  */
-void request_command(buffer* recv_buf, server_stat* status) {
+int request_command(buffer* recv_buf, server_stat* status) {
     char http_message[1000]; // used to hold http message from robot
     unsigned char* data;     // points to the data section of http_message
     unsigned char* itr;      // iterator pointing to beginning of next data section to be sent to client
@@ -265,8 +293,6 @@ void request_command(buffer* recv_buf, server_stat* status) {
     buffer* response;        // buffer to send to client
     int socket;              // index for which status.r_stat.http_sock[] to use
 
-    printf("requesting image\n");
-    
     // acknowledgement of command to client
     udp_send(recv_buf, status);
     request_header = extract_header(recv_buf);
@@ -301,6 +327,10 @@ void request_command(buffer* recv_buf, server_stat* status) {
             snprintf(http_message, 50, "GET /state?id=abrogate2&lx=0 HTTP/1.1\r\n\r\n");
             socket = 1;
             break;
+        default:
+            fprintf(stderr, "invalid client request\n");
+            return -2;
+            break;
     }
 
     
@@ -320,7 +350,6 @@ void request_command(buffer* recv_buf, server_stat* status) {
     // check for '200 OK'
     if (atoi(t) != 200) {
         fprintf(stderr, "error with http\n");
-        return;
     }
     
     // get length of data section of http message
@@ -347,7 +376,6 @@ void request_command(buffer* recv_buf, server_stat* status) {
         response_header.data[UP_BYTE_OFFSET] = (itr - data);
         response_header.data[UP_PAYLOAD_SIZE] = (content_len - UP_MAX_PAYLOAD) > 0 ? UP_MAX_PAYLOAD:content_len;
 
-        
         // pack the header
         insert_header(response, response_header);
 
@@ -364,6 +392,7 @@ void request_command(buffer* recv_buf, server_stat* status) {
         // clean up
         clear_buffer(response);
     }
+    return 1;
 }
 
 /* int http_get_content_length

@@ -4,11 +4,6 @@
 
 #define BUFFER_LEN 512
 
-void error(char const * message) {
-    fprintf(stderr, "%s\n", message);
-    exit(1);
-}
-
 char * formatMessage() {
     return "a sample message";
 }
