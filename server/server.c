@@ -121,7 +121,8 @@ int main(int argc, char** argv) {
     // execution loop
     srand(time(NULL));
     status.size = sizeof(status.cliaddr);
-    status.password = rand();
+    status.password = (rand() % pow(2, 16)) + 1;
+    status.password << 8;
     status.connected = 0;
     buffer* recv_buf = create_buffer(BUFFER_LEN);
     for (;;) {
