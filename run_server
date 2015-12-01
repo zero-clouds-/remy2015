@@ -1,0 +1,2 @@
+#!/bin/bash
+./robot_server -i 11 -n abrogate2 -h 169.55.155.236 -p 8082

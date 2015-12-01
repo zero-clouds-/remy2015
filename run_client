@@ -1,0 +1,2 @@
+#!/bin/bash
+./robot_client localhost 8082
