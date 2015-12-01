@@ -76,7 +76,7 @@ ssize_t udp_send(buffer* recv_buffer, server_stat* status);
 void quit(buffer* recv_buf, server_stat* status);
 int request_command(buffer* recv_buf, server_stat* status);
 int http_get_content_length(char* http_msg);
-unsigned char* http_get_data(char* http_msg);
+unsigned char* http_get_data(char* http_msg, int length);
 
 int main(int argc, char** argv) {
     struct timeval t_out;
@@ -135,9 +135,9 @@ int main(int argc, char** argv) {
     for (;;) {
 
         unsigned char *temp = calloc(BUFFER_LEN, 1);
-        int f;
-        if (f = recvfrom(status.udp_sock, temp, BUFFER_LEN, 0,
-                    (struct sockaddr *)(&status.cliaddr), &status.size) < 0) {
+        int f = 10000;
+        if ((f = recvfrom(status.udp_sock, temp, BUFFER_LEN, 0,
+                    (struct sockaddr *)(&status.cliaddr), &status.size)) <= 0) {
             fprintf(stderr, "recvfrom()\n");
         }
 
@@ -145,7 +145,10 @@ int main(int argc, char** argv) {
         clear_buffer(recv_buf);
         append_buffer(recv_buf, temp, f);
         header msg_header = extract_header(recv_buf);
-        printf("Request: %d\n", ((uint32_t*)(temp))[2]);
+        printf("data size received: %d\n", f);
+        printf("Data: %d\n", ((uint32_t*)(temp))[2]);
+        printf("Data: %d\n", ((uint32_t*)(recv_buf->data))[2]);
+        printf("Data: %d\n", msg_header.data[2]);
 
         // send to correct protocol
         void (*protocol_func)(buffer*, server_stat*);
@@ -234,6 +237,10 @@ void protocol1(buffer* recv_buf, server_stat* status){
                     break;
                 case IMAGE || GPS || dGPS || LASERS || MOVE || TURN || STOP:
                     printf("processing command\n");
+                    error = request_command(recv_buf, status);
+                    break;
+                case GPS:
+                    printf("HURRAH\n");
                     error = request_command(recv_buf, status);
                     break;
                 default:
@@ -342,31 +349,32 @@ int request_command(buffer* recv_buf, server_stat* status) {
     // create the http request
     switch (request_header.data[UP_CLIENT_REQUEST]) {
         case IMAGE:
-            snprintf(http_message, 50, "GET /snapshot?topic=/robot_%d/image?width=600?height=500 HTTP/1.1\r\n\r\n", status->r_stat.id);
+            snprintf(http_message, 100, "GET /snapshot?topic=/robot_%d/image?width=600?height=500 HTTP/1.1\r\n\r\n", status->r_stat.id);
             socket = 0;
             break;
         case GPS:
-            snprintf(http_message, 50, "GET /state?id=%s HTTP/1.1\r\n\r\n", status->r_stat.name);
+            printf("contacting gps port\n");
+            snprintf(http_message, 100, "GET /state?id=%s HTTP/1.1\r\n\r\n", status->r_stat.name);
             socket = 1;
             break;
         case LASERS:
-            snprintf(http_message, 50, "GET /state?id=%s HTTP/1.1\r\n\r\n", status->r_stat.name);
+            snprintf(http_message, 100, "GET /state?id=%s HTTP/1.1\r\n\r\n", status->r_stat.name);
             socket = 2;
             break;
         case dGPS:
-            snprintf(http_message, 50, "GET /state?id=%s HTTP/1.1\r\n\r\n", status->r_stat.name);
+            snprintf(http_message, 100, "GET /state?id=%s HTTP/1.1\r\n\r\n", status->r_stat.name);
             socket = 3;
             break;
         case MOVE:
-            snprintf(http_message, 50, "GET /twist?id=%s&lx=%d HTTP/1.1\r\n\r\n", status->r_stat.name, request_header.data[UP_REQUEST_DATA]);
+            snprintf(http_message, 100, "GET /twist?id=%s&lx=%d HTTP/1.1\r\n\r\n", status->r_stat.name, request_header.data[UP_REQUEST_DATA]);
             socket = 1;
             break;
         case TURN:
-            snprintf(http_message, 50, "GET /twist?id=%s&az=%d HTTP/1.1\r\n\r\n", status->r_stat.name, request_header.data[UP_REQUEST_DATA]);
+            snprintf(http_message, 100, "GET /twist?id=%s&az=%d HTTP/1.1\r\n\r\n", status->r_stat.name, request_header.data[UP_REQUEST_DATA]);
             socket = 1;
             break;
         case STOP:
-            snprintf(http_message, 50, "GET /twist?id=%s&lx=0 HTTP/1.1\r\n\r\n", status->r_stat.name);
+            snprintf(http_message, 100, "GET /twist?id=%s&lx=0 HTTP/1.1\r\n\r\n", status->r_stat.name);
             socket = 1;
             break;
         default:
@@ -384,7 +392,9 @@ int request_command(buffer* recv_buf, server_stat* status) {
     if (n < 0) {
         fprintf(stderr, "read()\n");
     }
-    
+    char *useless1, *useless2;
+    useless1 = strdup(http_message);
+    useless2 = strdup(http_message);
     // decipher http message
     char *t = strtok(http_message, " ");
     t = strtok(NULL, " ");
@@ -395,20 +405,19 @@ int request_command(buffer* recv_buf, server_stat* status) {
     }
     
     // get length of data section of http message
-    if ((content_len = http_get_content_length(http_message)) != 0) {
-        if ((data = http_get_data(http_message)) == NULL) {
+    if ((content_len = http_get_content_length(useless1)) != 0) {
+        if ((data = http_get_data(useless2, content_len)) == NULL) {
             fprintf(stderr, "http_get_data()\n");
         }
     }
 
     // build the header
-    response_header.data[UP_VERSION] = request_header.data[UP_VERSION];
-    response_header.data[UP_IDENTIFIER] = request_header.data[UP_IDENTIFIER];
-    response_header.data[UP_CLIENT_REQUEST] = request_header.data[UP_CLIENT_REQUEST];
-    response_header.data[UP_REQUEST_DATA] = request_header.data[UP_REQUEST_DATA];
+    response_header.data[UP_VERSION] = 0;
+    response_header.data[UP_IDENTIFIER] = ((uint32_t*)(recv_buf->data))[1];
+    response_header.data[UP_CLIENT_REQUEST] = ((uint32_t*)(recv_buf->data))[2];
+    response_header.data[UP_REQUEST_DATA] = ((uint32_t*)(recv_buf->data))[3];
     response_header.data[UP_BYTE_OFFSET] = 0;
     response_header.data[UP_TOTAL_SIZE] = content_len;
-    response_header.data[UP_PAYLOAD_SIZE] = (content_len - UP_MAX_PAYLOAD) > 0 ? UP_MAX_PAYLOAD:content_len;
 
     // start sending data
     response = create_buffer(BUFFER_LEN);
@@ -427,10 +436,13 @@ int request_command(buffer* recv_buf, server_stat* status) {
         // adjust pointer and amount of data left to send
         itr += response_header.data[UP_PAYLOAD_SIZE];
         content_len -= response_header.data[UP_PAYLOAD_SIZE];
-        
+
+        printf("version: %d\n", ((uint32_t*)(response->data))[0]);
+        printf("pass: %d\n", ((uint32_t*)(recv_buf->data))[1]);
+        printf("request: %d\n", ((uint32_t*)(recv_buf->data))[2]);
         // send to client
-        udp_send(response, status);
-        
+        int num = udp_send(response, status);
+        printf("size sent: %d\n", num);
         // clean up
         clear_buffer(response);
     }
@@ -443,10 +455,11 @@ int request_command(buffer* recv_buf, server_stat* status) {
  */
 int http_get_content_length(char* http_msg) {
     char* t;
-    if ((t = strstr(http_msg, "Content-Length")) != NULL) {
+    if ((t = strstr(http_msg, "Content-Length:")) != NULL) {
         strtok(t, " ");
         return atoi(strtok(NULL, "\r\n"));
     }
+    printf("error getting content length\n");
     return 0;
 }
 
@@ -454,10 +467,12 @@ int http_get_content_length(char* http_msg) {
  *   char* http_msg - array containing an http response from the robot
  * Returns a pointer to the beginning of the data section of the http_message
  */
-unsigned char* http_get_data(char* http_msg) {
-    char *t;
+unsigned char* http_get_data(char* http_msg, int length) {
+    char *t, temp[length + 1];
     if ((t = strstr(http_msg, "\r\n\r\n")) != NULL) {
         t += strlen("\r\n\r\n");
+        printf("%s\n", t);
+        snprintf(temp, length, "%s", t);
         return (unsigned char*)t;
     }
     return NULL;
