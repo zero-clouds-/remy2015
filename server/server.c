@@ -68,6 +68,7 @@ int udp_server(char const* port_name) {
 int timeout_setup(int socket, struct timeval timeout);
 void protocol1(buffer* recv_buffer, server_stat* status);
 void protocol2(buffer* recv_buffer, server_stat* status);
+void print_header(buffer* buf);
 int check_version(const header* msg_header);
 int check_pass(const header* msg_header, uint32_t pass);
 uint32_t get_command(const header* msg_header);
@@ -78,10 +79,10 @@ int http_get_content_length(char* http_msg);
 unsigned char* http_get_data(char* http_msg);
 
 int main(int argc, char** argv) {
+    struct timeval t_out;
     int i, iflag, hflag, nflag, pflag;
     server_stat status;
     char *port, hostname[BUFFER_LEN];
-    struct timeval timeout;
     hostname[0] = '\0';
     if (argc != 9) {
         fprintf(stderr, "usage: %s -i <robot_id> -n <robot-name> -h <http_hostname> -p <udp_port>\n", argv[0]);
@@ -121,14 +122,9 @@ int main(int argc, char** argv) {
     status.udp_sock = udp_server(port);
 
     // timeouts
-    timeout.tv_sec = 1;
-    timeout.tv_usec = 0;
-
-    timeout_setup(status.r_stat.http_sock[0], timeout);
-    timeout_setup(status.r_stat.http_sock[1], timeout);
-    timeout_setup(status.r_stat.http_sock[2], timeout);
-    timeout_setup(status.r_stat.http_sock[3], timeout);
-    timeout_setup(status.udp_sock, timeout);
+    t_out.tv_sec = 0;
+    t_out.tv_usec = 0;
+    timeout_setup(status.udp_sock, t_out);
 
     // execution loop
     srand(time(NULL));
@@ -148,10 +144,13 @@ int main(int argc, char** argv) {
         append_buffer(recv_buf, temp, strlen((char*)temp));
         header msg_header = extract_header(recv_buf);
 
+        print_header(recv_buf);
+
         // send to correct protocol
         void (*protocol_func)(buffer*, server_stat*);
         protocol_func = check_version(&msg_header) ? &protocol1:&protocol2;
         protocol_func(recv_buf, &status);
+        clear_buffer(recv_buf);
     }
     return 0;
 }
@@ -176,6 +175,17 @@ int timeout_setup(int socket, struct timeval timeout) {
  * Processes the recv_buf as the class protocol dictates
  */
 void protocol1(buffer* recv_buf, server_stat* status){
+    struct timeval timeout;
+    // timeouts
+    timeout.tv_sec = 1;
+    timeout.tv_usec = 0;
+
+    timeout_setup(status->r_stat.http_sock[0], timeout);
+    timeout_setup(status->r_stat.http_sock[1], timeout);
+    timeout_setup(status->r_stat.http_sock[2], timeout);
+    timeout_setup(status->r_stat.http_sock[3], timeout);
+    timeout_setup(status->udp_sock, timeout);
+
     // giant mess of conditionals
     fprintf(stdout, "version 1 protocol\n");
     int error = 0;
@@ -191,33 +201,35 @@ void protocol1(buffer* recv_buf, server_stat* status){
                     fprintf(stderr, "sendto()\n");
                 }
             } else {
-                printf("ignore\n");
+                printf("ignore1\n");
             }
         } else {
-            printf("ignore\n");
+            printf("ignore2\n");
         }
     } else if (status->connected == 1) {
         if (check_pass(&msg_header, status->password)) {
             if (get_command(&msg_header) == CONNECT) {
                 status->connected = 2;
+                printf("Connected to a client\n");
             } else {
-                printf("ignore\n");
+                printf("ignore3\n");
             }
         } else {
-            printf("ignore\n");
+            printf("ignore4\n");
         }
     } else {
         if (!check_pass(&msg_header, status->password)) {
-            printf("ignore\n");
+            printf("ignore5\n");
         } else {
             switch (get_command(&msg_header)) {
                 case CONNECT:
-                    printf("ignore\n");
+                    printf("ignore6\n");
                     break;
                 case QUIT:
                     quit(recv_buf, status);
                     break;
                 case IMAGE || GPS || dGPS || LASERS || MOVE || TURN || STOP:
+                    printf("processing command\n");
                     error = request_command(recv_buf, status);
                     break;
                 default:
@@ -242,12 +254,19 @@ void protocol2(buffer* recv_buffer, server_stat* status) {
     fprintf(stdout, "version 2 protocol\n");
 }
 
+void print_header(buffer* buf) {
+    header msg_header = extract_header(buf);
+    printf("Version:  %d\n", msg_header.data[UP_VERSION]);
+    printf("Password: %d\n", msg_header.data[UP_IDENTIFIER]);
+    printf("Request:  %d\n", msg_header.data[UP_CLIENT_REQUEST]);
+}
+
 /* int check_version
  *   const header* msg_header - protocol header
  * Returns the version identifier of the client message
  */
 int check_version(const header* msg_header) {
-    return msg_header->data[UP_IDENTIFIER] == 0;
+    return msg_header->data[UP_VERSION] == 0;
 }
 
 /* int check_pass
@@ -256,7 +275,7 @@ int check_version(const header* msg_header) {
  * Returns 0 otherwise
  */
 int check_pass(const header* msg_header, uint32_t pass) {
-    return msg_header->data[UP_CLIENT_REQUEST] == pass;
+    return msg_header->data[UP_IDENTIFIER] == pass;
 }
 
 /* uint32_t get_command
@@ -264,7 +283,7 @@ int check_pass(const header* msg_header, uint32_t pass) {
  * Returns the command requested by the client
  */
 uint32_t get_command(const header* msg_header) {
-    return msg_header->data[UP_REQUEST_DATA];
+    return msg_header->data[UP_CLIENT_REQUEST];
 }
 
 /* ssize_t udp_send
