@@ -40,8 +40,7 @@ int main(int argc, char** argv) {
     // connect to the UDP server
     sock = connect_udp(hostname, argv[2], &serv_addr);
 
-    unsigned char* buf = (unsigned char*)malloc(BUFFER_LEN * sizeof(unsigned char));
-
+    buffer* buf = create_buffer(BUFFER_LEN);
     buffer* connect_message = create_message(0, 0, CONNECT, 0, 0, 0, 0);
 
     //Grace - implement client to receive server response
@@ -53,11 +52,11 @@ int main(int argc, char** argv) {
             ssize_t bytes_sent = sendto(sock, connect_message->data, connect_message->len, 0, serv_addr->ai_addr, serv_addr->ai_addrlen);
             if (bytes_sent < 0) error("sendto()");
             fprintf(stdout, "waiting for password... ");
-            ssize_t bytes_recv = recvfrom(sock, buf, BUFFER_LEN, 0, (struct sockaddr*)&from_addr, &from_addrlen);
+            ssize_t bytes_recv = recvfrom(sock, buf->data, buf->size, 0, (struct sockaddr*)&from_addr, &from_addrlen);
             if (bytes_recv < 0) error("recvfrom()");
+            buf->len = bytes_recv;
             fprintf(stdout, "password received\n");
-            header h;
-            memcpy(h.data, buf, UP_HEADER_LEN);
+            header h = extract_header(buf);
             password = h.data[UP_IDENTIFIER];
             buffer* ack = create_message(0, password, CONNECT, 0, 0, 0, 0);
             fprintf(stdout, "sending acknowledgement\n");
@@ -73,13 +72,13 @@ int main(int argc, char** argv) {
             ssize_t bytes_sent = sendto(sock, next_message->data, next_message->len, 0, serv_addr->ai_addr, serv_addr->ai_addrlen);
             if (bytes_sent < 0) error("sendto()");
             fprintf(stdout, "waiting for data... ");
-            ssize_t bytes_recv = recvfrom(sock, buf, BUFFER_LEN, 0, (struct sockaddr*)&from_addr, &from_addrlen);
+            ssize_t bytes_recv = recvfrom(sock, buf->data, buf->size, 0, (struct sockaddr*)&from_addr, &from_addrlen);
             if (bytes_recv < 0) error("recvfrom()");
+            buf->len = bytes_recv;
             fprintf(stdout, "data received\n");
-            header h;
-            memcpy(h.data, buf, UP_HEADER_LEN);
-            buf[h.data[UP_PAYLOAD_SIZE] + UP_HEADER_LEN] = '\0';
-            fprintf(stdout, "%s\n", buf + h.data[UP_PAYLOAD_SIZE]);
+            header h = extract_header(buf);
+            buf->data[h.data[UP_PAYLOAD_SIZE] + UP_HEADER_LEN] = '\0';
+            fprintf(stdout, "%s\n", (char*)buf->data + h.data[UP_PAYLOAD_SIZE]);
             buffer* close_message = create_message(0, password, QUIT, 0, 0, 0, 0);
             fprintf(stdout, "sending quit request\n");
             bytes_sent = sendto(sock, close_message->data, close_message->len, 0, serv_addr->ai_addr, serv_addr->ai_addrlen);
