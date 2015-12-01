@@ -13,7 +13,7 @@ header extract_header(buffer* datagram) {
 void separate_datagram(buffer* dst, buffer* src, int offset, int len) {
   header h;
   clear_buffer(dst);
-  dst->len = (UP_HEADER_LEN + len) * sizeof(unsigned int);
+  dst->len = (UP_HEADER_LEN + len) * sizeof(unsigned char);
   memcpy(dst->data + UP_HEADER_LEN, src->data + offset, len);
   h.data[UP_BYTE_OFFSET] = offset;
   h.data[UP_TOTAL_SIZE] = src->len;
@@ -25,4 +25,18 @@ void separate_datagram(buffer* dst, buffer* src, int offset, int len) {
 void assemble_datagram(buffer* dst, buffer* src) {
   header h = extract_header(src);
   memcpy(dst->data + h.data[UP_BYTE_OFFSET], src->data + UP_HEADER_LEN, h.data[UP_PAYLOAD_SIZE]);
+}
+
+buffer* create_message(uint32_t version, uint32_t id, uint32_t request, uint32_t data, uint32_t offset, uint32_t total_size, uint32_t payload) {
+  buffer* message = create_buffer((UP_HEADER_LEN + payload) * sizeof(unsigned char));
+  uint32_t header[7];
+  header[UP_VERSION] = version;
+  header[UP_IDENTIFIER] = id;
+  header[UP_CLIENT_REQUEST] = request;
+  header[UP_REQUEST_DATA] = data;
+  header[UP_BYTE_OFFSET] = offset;
+  header[UP_TOTAL_SIZE] = total_size;
+  header[UP_PAYLOAD_SIZE] = payload;
+  memcpy(message->data, header, UP_HEADER_LEN);
+  return message;
 }

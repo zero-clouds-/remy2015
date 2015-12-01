@@ -45,4 +45,6 @@ void separate_datagram(buffer* dst, buffer* src, int offset, int len);
 
 void assemble_datagram(buffer* dst, buffer* src);
 
+buffer* create_message(uint32_t version, uint32_t id, uint32_t request, uint32_t data, uint32_t offset, uint32_t total_size, uint32_t payload);
+
 #endif
