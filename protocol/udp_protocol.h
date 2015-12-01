@@ -10,6 +10,8 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 
+#include <unistd.h>
+
 #define UP_HEADER_LEN 28
 #define UP_MAX_PAYLOAD 272
 #define UP_VERSION 0
