@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-Wall
+CFLAGS=-Wall -g
 
 SSRC=$(wildcard server/*.c)
 SOBJ=$(SSRC:.c=.o)

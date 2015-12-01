@@ -2,6 +2,7 @@
 
 void insert_header(buffer* datagram, header h) {
   memcpy(datagram->data, h.data, UP_HEADER_LEN);
+  datagram->len = UP_HEADER_LEN;
 }
 header extract_header(buffer* datagram) {
   header h;

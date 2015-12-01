@@ -139,21 +139,22 @@ int main(int argc, char** argv) {
         if ((f = recvfrom(status.udp_sock, temp, BUFFER_LEN, 0,
                     (struct sockaddr *)(&status.cliaddr), &status.size)) <= 0) {
             fprintf(stderr, "recvfrom()\n");
+        } else {
+
+            // decipher message
+            clear_buffer(recv_buf);
+            append_buffer(recv_buf, temp, f);
+            header msg_header = extract_header(recv_buf);
+            printf("data size received: %d\n", f);
+            printf("Data: %d\n", ((uint32_t*)(temp))[2]);
+            printf("Data: %d\n", ((uint32_t*)(recv_buf->data))[2]);
+            printf("Data: %d\n", msg_header.data[2]);
+
+            // send to correct protocol
+            void (*protocol_func)(buffer*, server_stat*);
+            protocol_func = check_version(&msg_header) ? &protocol1:&protocol2;
+            protocol_func(recv_buf, &status);
         }
-
-        // decipher message
-        clear_buffer(recv_buf);
-        append_buffer(recv_buf, temp, f);
-        header msg_header = extract_header(recv_buf);
-        printf("data size received: %d\n", f);
-        printf("Data: %d\n", ((uint32_t*)(temp))[2]);
-        printf("Data: %d\n", ((uint32_t*)(recv_buf->data))[2]);
-        printf("Data: %d\n", msg_header.data[2]);
-
-        // send to correct protocol
-        void (*protocol_func)(buffer*, server_stat*);
-        protocol_func = check_version(&msg_header) ? &protocol1:&protocol2;
-        protocol_func(recv_buf, &status);
     }
     return 0;
 }
@@ -429,7 +430,7 @@ int request_command(buffer* recv_buf, server_stat* status) {
 
         // pack the header
         insert_header(response, response_header);
-
+        fprintf(stderr, "appending %d bytes to %d bytes in %d-sized buffer\n", response_header.data[UP_PAYLOAD_SIZE], response->len, response->size);
         // pack the data
         append_buffer(response, itr, response_header.data[UP_PAYLOAD_SIZE]);
         

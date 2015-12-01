@@ -63,6 +63,7 @@ int main(int argc, char** argv) {
     strncpy(hostname, argv[1], BUFFER_LEN - 1);
     //resolve port
     port = atoi(argv[2]);
+    if (port == 0) error("port");
     // connect to the UDP server
     sock = connect_udp(hostname, argv[2], &serv_addr);
 
