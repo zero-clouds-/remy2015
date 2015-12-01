@@ -305,15 +305,15 @@ int request_command(buffer* recv_buf, server_stat* status) {
             socket = 3;
             break;
         case MOVE:
-            snprintf(http_message, 50, "GET /state?id=abrogate2&lx=%d HTTP/1.1\r\n\r\n", request_header.data[UP_REQUEST_DATA]);
+            snprintf(http_message, 50, "GET /twist?id=abrogate2&lx=%d HTTP/1.1\r\n\r\n", request_header.data[UP_REQUEST_DATA]);
             socket = 1;
             break;
         case TURN:
-            snprintf(http_message, 50, "GET /state?id=abrogate2&az=%d HTTP/1.1\r\n\r\n", request_header.data[UP_REQUEST_DATA]);
+            snprintf(http_message, 50, "GET /twist?id=abrogate2&az=%d HTTP/1.1\r\n\r\n", request_header.data[UP_REQUEST_DATA]);
             socket = 1;
             break;
         case STOP:
-            snprintf(http_message, 50, "GET /state?id=abrogate2&lx=0 HTTP/1.1\r\n\r\n");
+            snprintf(http_message, 50, "GET /twist?id=abrogate2&lx=0 HTTP/1.1\r\n\r\n");
             socket = 1;
             break;
         default:
