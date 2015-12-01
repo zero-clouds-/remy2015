@@ -20,6 +20,19 @@
 #define UP_TOTAL_SIZE 5
 #define UP_PAYLOAD_SIZE 6
 
+// valid command encodings
+#define CONNECT      0
+#define IMAGE        2
+#define GPS          4
+#define dGPS         8
+#define LASERS       16
+#define MOVE         32
+#define TURN         64
+#define STOP         128
+#define QUIT         255
+#define CLIENT_ERROR 256
+#define HTTP_ERROR   512
+
 typedef struct header_t {
   uint32_t data[7];
 } header; 

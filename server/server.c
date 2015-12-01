@@ -10,17 +10,6 @@
 #define dGPS_PORT   8084
 #define BUFFER_LEN  512
 
-// valid command encodings
-#define CONNECT     0
-#define QUIT        255
-#define IMAGE       2
-#define GPS         4
-#define dGPS        8
-#define LASERS      16
-#define MOVE        32
-#define TURN        64
-#define STOP        128
-
 typedef struct robot_info {
     int id;
     int http_sock[4]; // 0 = image, 1 = GPS/move/turn/stop, 2 = Lasers, 3 = dGPS
