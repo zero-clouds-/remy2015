@@ -38,5 +38,6 @@ buffer* create_message(uint32_t version, uint32_t id, uint32_t request, uint32_t
   header[UP_TOTAL_SIZE] = total_size;
   header[UP_PAYLOAD_SIZE] = payload;
   memcpy(message->data, header, UP_HEADER_LEN);
+  message->len = UP_HEADER_LEN;
   return message;
 }

@@ -28,7 +28,10 @@ void send_request(int sock, struct addrinfo* serv_addr, uint32_t password, uint3
     header x = extract_header(next_message);
     fprintf(stdout, "actually sending request \"%d:%d\"\n", x.data[UP_CLIENT_REQUEST], x.data[UP_REQUEST_DATA]);
     ssize_t bytes_sent = sendto(sock, next_message->data, next_message->len, 0, serv_addr->ai_addr, serv_addr->ai_addrlen);
-    if (bytes_sent != UP_HEADER_LEN) error("sendto()");
+    if (bytes_sent != UP_HEADER_LEN) {
+        fprintf(stderr, "%ld bytes sent, %d intended\n", bytes_sent, next_message->len);
+        error("sendto()");
+    }
     fprintf(stdout, "waiting for data... ");
     ssize_t bytes_recv = recvfrom(sock, buf->data, buf->size, 0, (struct sockaddr*)&from_addr, &from_addrlen);
     if (bytes_recv < 0) error("recvfrom()");
