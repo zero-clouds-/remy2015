@@ -134,23 +134,23 @@ int main(int argc, char** argv) {
     buffer* recv_buf = create_buffer(BUFFER_LEN);
     for (;;) {
 
-        unsigned char temp[BUFFER_LEN];
-        if (recvfrom(status.udp_sock, temp, BUFFER_LEN, 0,
+        unsigned char *temp = calloc(BUFFER_LEN, 1);
+        int f;
+        if (f = recvfrom(status.udp_sock, temp, BUFFER_LEN, 0,
                     (struct sockaddr *)(&status.cliaddr), &status.size) < 0) {
             fprintf(stderr, "recvfrom()\n");
         }
 
         // decipher message
-        append_buffer(recv_buf, temp, strlen((char*)temp));
+        clear_buffer(recv_buf);
+        append_buffer(recv_buf, temp, f);
         header msg_header = extract_header(recv_buf);
-
-        print_header(recv_buf);
+        printf("Request: %d\n", ((uint32_t*)(temp))[2]);
 
         // send to correct protocol
         void (*protocol_func)(buffer*, server_stat*);
         protocol_func = check_version(&msg_header) ? &protocol1:&protocol2;
         protocol_func(recv_buf, &status);
-        clear_buffer(recv_buf);
     }
     return 0;
 }
@@ -176,9 +176,12 @@ int timeout_setup(int socket, struct timeval timeout) {
  */
 void protocol1(buffer* recv_buf, server_stat* status){
     struct timeval timeout;
+    struct timeval timeout_0;
     // timeouts
     timeout.tv_sec = 1;
     timeout.tv_usec = 0;
+    timeout_0.tv_sec = 0;
+    timeout_0.tv_usec = 0;
 
     timeout_setup(status->r_stat.http_sock[0], timeout);
     timeout_setup(status->r_stat.http_sock[1], timeout);
@@ -210,6 +213,7 @@ void protocol1(buffer* recv_buf, server_stat* status){
         if (check_pass(&msg_header, status->password)) {
             if (get_command(&msg_header) == CONNECT) {
                 status->connected = 2;
+                timeout_setup(status->udp_sock, timeout_0);
                 printf("Connected to a client\n");
             } else {
                 printf("ignore3\n");

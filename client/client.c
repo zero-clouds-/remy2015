@@ -24,9 +24,11 @@ void send_request(int sock, struct addrinfo* serv_addr, uint32_t password, uint3
     struct sockaddr_storage from_addr;
     socklen_t from_addrlen = sizeof(from_addr);
     buffer* next_message = create_message(0, password, request, 0, 0, 0, 0);
-    fprintf(stdout, "sending request \"%d:%d\"\n", request, data);
+    fprintf(stdout, "intending to send request \"%d:%d\"\n", request, data);
+    header x = extract_header(next_message);
+    fprintf(stdout, "actually sending request \"%d:%d\"\n", x.data[UP_CLIENT_REQUEST], x.data[UP_REQUEST_DATA]);
     ssize_t bytes_sent = sendto(sock, next_message->data, next_message->len, 0, serv_addr->ai_addr, serv_addr->ai_addrlen);
-    if (bytes_sent < 0) error("sendto()");
+    if (bytes_sent != UP_HEADER_LEN) error("sendto()");
     fprintf(stdout, "waiting for data... ");
     ssize_t bytes_recv = recvfrom(sock, buf->data, buf->size, 0, (struct sockaddr*)&from_addr, &from_addrlen);
     if (bytes_recv < 0) error("recvfrom()");
@@ -86,6 +88,7 @@ int main(int argc, char** argv) {
             delete_buffer(ack);
             connected = 1;
         } else {
+            sleep(3);
             send_request(sock, serv_addr, password, GPS, 0, buf);
             break;
         }
