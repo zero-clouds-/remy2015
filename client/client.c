@@ -24,7 +24,7 @@ int connect_udp(char const* hostname, char const* port_name, struct addrinfo** s
 }
 
 int main(int argc, char** argv) {
-        int port, sock;
+        int sock;
         char hostname[BUFFER_LEN];
         struct addrinfo* serv_addr;
         hostname[0] = '\0';
@@ -36,20 +36,9 @@ int main(int argc, char** argv) {
 
         // read in the required arguments
         strncpy(hostname, argv[1], BUFFER_LEN - 1);
-        //resolve port
-        port = atoi(argv[2]);
         // connect to the UDP server
         sock = connect_udp(hostname, argv[2], &serv_addr);
-
-
-        struct sockaddr_in servAddr;
-        struct sockaddr_in clntAddr;
-        /* Construct the server address structure */
-        memset(&servAddr, 0, sizeof(servAddr));    /* reset structure fields */
-        servAddr.sin_family = AF_INET;                 /* Internet address family */
-        servAddr.sin_addr.s_addr = inet_addr(hostname);  /* IP address of server*/
-        servAddr.sin_port   = htons(port);     /* Server port to send to */
-
+        //create message buffer
         char *totalMessage = (char *)malloc(BUFFER_LEN * 10);
 
         //Grace - implement client to receive server response
@@ -57,7 +46,7 @@ int main(int argc, char** argv) {
 
                 //configure formatMessage() to generate a proper message to specs
                 char * serverMessage = formatMessage();
-                if(sendto(sock, serverMessage, strlen(serverMessage), 0, (struct sockaddr *) &servAddr, sizeof(servAddr)) < 0) {
+                if(sendto(sock, serverMessage, strlen(serverMessage), 0, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
                     //error message
                     error("error with sendto()");
                 }
@@ -66,9 +55,10 @@ int main(int argc, char** argv) {
                  * figure out how much space we need when getting the response
                  * paste each message into the string to write the file later
                  */
-                unsigned int clntSize = sizeof(clntAddr);
+                struct sockaddr_storage fromClnt;
+                socklen_t clntSize = sizeof(fromClnt);
                 char * serverResponse = (char *)malloc(350);
-                if(recvfrom(sock, serverResponse, 349, 0, (struct sockaddr *) &clntAddr, &clntSize) < 0) {
+                if(recvfrom(sock, serverResponse, 349, 0, (struct sockaddr *) &fromClnt, &clntSize) < 0) {
                     error("error with recvfrom()");
                 }
 
