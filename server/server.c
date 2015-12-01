@@ -145,10 +145,7 @@ int main(int argc, char** argv) {
             clear_buffer(recv_buf);
             append_buffer(recv_buf, temp, f);
             header msg_header = extract_header(recv_buf);
-            printf("data size received: %d\n", f);
-            printf("Data: %d\n", ((uint32_t*)(temp))[2]);
-            printf("Data: %d\n", ((uint32_t*)(recv_buf->data))[2]);
-            printf("Data: %d\n", msg_header.data[2]);
+            printf("size received: %d\n", f);
 
             // send to correct protocol
             void (*protocol_func)(buffer*, server_stat*);
@@ -235,6 +232,7 @@ void protocol1(buffer* recv_buf, server_stat* status){
                     break;
                 case QUIT:
                     quit(recv_buf, status);
+                    timeout_setup(status->udp_sock, timeout_0);
                     break;
                 case IMAGE || GPS || dGPS || LASERS || MOVE || TURN || STOP:
                     printf("processing command\n");
@@ -334,7 +332,7 @@ void quit(buffer* recv_buf, server_stat* status) {
  *          1 if successful
  */
 int request_command(buffer* recv_buf, server_stat* status) {
-    char http_message[1000]; // used to hold http message from robot
+    char* http_message;      // used to hold http message from robot
     unsigned char* data;     // points to the data section of http_message
     unsigned char* itr;      // iterator pointing to beginning of next data section to be sent to client
     int n, content_len;      // length of the http data section
@@ -348,6 +346,7 @@ int request_command(buffer* recv_buf, server_stat* status) {
     request_header = extract_header(recv_buf);
 
     // create the http request
+    http_message = calloc(1000, 1);
     switch (request_header.data[UP_CLIENT_REQUEST]) {
         case IMAGE:
             snprintf(http_message, 100, "GET /snapshot?topic=/robot_%d/image?width=600?height=500 HTTP/1.1\r\n\r\n", status->r_stat.id);
@@ -389,6 +388,8 @@ int request_command(buffer* recv_buf, server_stat* status) {
     write(status->r_stat.http_sock[socket], http_message, strlen(http_message));
 
     // receive a response from the robot
+    free(http_message);
+    http_message = calloc(1000, 1);
     n = read(status->r_stat.http_sock[socket], http_message, 1000);
     if (n < 0) {
         fprintf(stderr, "read()\n");
@@ -396,6 +397,7 @@ int request_command(buffer* recv_buf, server_stat* status) {
     char *useless1, *useless2;
     useless1 = strdup(http_message);
     useless2 = strdup(http_message);
+    printf("%s\n", http_message);
     // decipher http message
     char *t = strtok(http_message, " ");
     t = strtok(NULL, " ");
@@ -438,15 +440,13 @@ int request_command(buffer* recv_buf, server_stat* status) {
         itr += response_header.data[UP_PAYLOAD_SIZE];
         content_len -= response_header.data[UP_PAYLOAD_SIZE];
 
-        printf("version: %d\n", ((uint32_t*)(response->data))[0]);
-        printf("pass: %d\n", ((uint32_t*)(recv_buf->data))[1]);
-        printf("request: %d\n", ((uint32_t*)(recv_buf->data))[2]);
         // send to client
         int num = udp_send(response, status);
         printf("size sent: %d\n", num);
         // clean up
         clear_buffer(response);
     }
+    free(http_message);
     return 1;
 }
 
