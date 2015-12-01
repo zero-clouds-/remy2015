@@ -13,6 +13,7 @@
 typedef struct robot_info {
     int id;
     int http_sock[4]; // 0 = image, 1 = GPS/move/turn/stop, 2 = Lasers, 3 = dGPS
+    char* name;
 } robot_stat;
 
 typedef struct serverstatus_info {
@@ -64,6 +65,7 @@ int udp_server(char const* port_name) {
     return sock;
 }
 
+int timeout_setup(int socket, struct timeval timeout);
 void protocol1(buffer* recv_buffer, server_stat* status);
 void protocol2(buffer* recv_buffer, server_stat* status);
 int check_version(const header* msg_header);
@@ -76,12 +78,13 @@ int http_get_content_length(char* http_msg);
 unsigned char* http_get_data(char* http_msg);
 
 int main(int argc, char** argv) {
-    int i, iflag, hflag, pflag;
+    int i, iflag, hflag, nflag, pflag;
     server_stat status;
     char *port, hostname[BUFFER_LEN];
+    struct timeval timeout;
     hostname[0] = '\0';
-    if (argc != 7) {
-        fprintf(stderr, "usage: %s -i <robot_id> -h <http_hostname> -p <udp_port>\n", argv[0]);
+    if (argc != 9) {
+        fprintf(stderr, "usage: %s -i <robot_id> -n <robot-name> -h <http_hostname> -p <udp_port>\n", argv[0]);
         return -1;
     }
 
@@ -97,27 +100,40 @@ int main(int argc, char** argv) {
         } else if (strcmp(argv[i], "-p") == 0) {
             port = argv[i + 1];
             pflag = 1;
-        } else {
-            fprintf(stderr, "usage: %s -i <robot_id> -h <http_hostname> -p <udp_port>\n", argv[0]);
+        } else if (strcmp(argv[i], "-n") == 0) {
+            status.r_stat.name = argv[i + 1];
+            nflag = 1;
+        }else {
+            fprintf(stderr, "usage: %s -i <robot_id> -h <http_hostname> -n <robot_name> -p <udp_port>\n", argv[0]);
             return -1;
         }
     }
-    if (!(iflag && hflag && pflag)) {
-        fprintf(stderr, "usage: %s -i <robot_id> -h <http_hostname> -p <udp_port>\n", argv[0]);
+    if (!(iflag && hflag && nflag && pflag)) {
+        fprintf(stderr, "usage: %s -i <robot_id> -h <http_hostname> -n <robot_name> -p <udp_port>\n", argv[0]);
         return -1;
     }
 
     // set up the sockets
-    status.r_stat.http_sock[1] = tcp_connect(hostname, IMAGE_PORT);
-    status.r_stat.http_sock[2] = tcp_connect(hostname, GPS_PORT);
-    status.r_stat.http_sock[3] = tcp_connect(hostname, LASERS_PORT);
-    status.r_stat.http_sock[4] = tcp_connect(hostname, dGPS_PORT);
+    status.r_stat.http_sock[0] = tcp_connect(hostname, IMAGE_PORT);
+    status.r_stat.http_sock[1] = tcp_connect(hostname, GPS_PORT);
+    status.r_stat.http_sock[2] = tcp_connect(hostname, LASERS_PORT);
+    status.r_stat.http_sock[3] = tcp_connect(hostname, dGPS_PORT);
     status.udp_sock = udp_server(port);
+
+    // timeouts
+    timeout.tv_sec = 1;
+    timeout.tv_usec = 0;
+
+    timeout_setup(status.r_stat.http_sock[0], timeout);
+    timeout_setup(status.r_stat.http_sock[1], timeout);
+    timeout_setup(status.r_stat.http_sock[2], timeout);
+    timeout_setup(status.r_stat.http_sock[3], timeout);
+    timeout_setup(status.udp_sock, timeout);
 
     // execution loop
     srand(time(NULL));
     status.size = sizeof(status.cliaddr);
-    status.password = rand();
+    status.password = rand() + 1;
     status.connected = 0;
     buffer* recv_buf = create_buffer(BUFFER_LEN);
     for (;;) {
@@ -138,6 +154,20 @@ int main(int argc, char** argv) {
         protocol_func(recv_buf, &status);
     }
     return 0;
+}
+
+int timeout_setup(int socket, struct timeval timeout) {
+    if (setsockopt (socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout,
+                sizeof(timeout)) < 0) {
+        error("setsockopt failed\n");
+        return 0;
+    }
+    if (setsockopt (socket, SOL_SOCKET, SO_SNDTIMEO, (char *)&timeout,
+               sizeof(timeout)) < 0) {
+        error("setsockopt failed\n");
+        return 0;
+    }
+    return 1;
 }
 
 /* void protocol1
@@ -289,31 +319,31 @@ int request_command(buffer* recv_buf, server_stat* status) {
     // create the http request
     switch (request_header.data[UP_CLIENT_REQUEST]) {
         case IMAGE:
-            strncpy(http_message, "GET /snapshot?topic=/robot_11/image?width=600?height=500 HTTP/1.1\r\n\r\n", 50);
+            snprintf(http_message, 50, "GET /snapshot?topic=/robot_%d/image?width=600?height=500 HTTP/1.1\r\n\r\n", status->r_stat.id);
             socket = 0;
             break;
         case GPS:
-            strncpy(http_message, "GET /state?id=abrogate2 HTTP/1.1\r\n\r\n", 50);
+            snprintf(http_message, 50, "GET /state?id=%s HTTP/1.1\r\n\r\n", status->r_stat.name);
             socket = 1;
             break;
         case LASERS:
-            strncpy(http_message, "GET /state?id=abrogate2 HTTP/1.1\r\n\r\n", 50);
+            snprintf(http_message, 50, "GET /state?id=%s HTTP/1.1\r\n\r\n", status->r_stat.name);
             socket = 2;
             break;
         case dGPS:
-            strncpy(http_message, "GET /state?id=abrogate2 HTTP/1.1\r\n\r\n", 50);
+            snprintf(http_message, 50, "GET /state?id=%s HTTP/1.1\r\n\r\n", status->r_stat.name);
             socket = 3;
             break;
         case MOVE:
-            snprintf(http_message, 50, "GET /state?id=abrogate2&lx=%d HTTP/1.1\r\n\r\n", request_header.data[UP_REQUEST_DATA]);
+            snprintf(http_message, 50, "GET /twist?id=%s&lx=%d HTTP/1.1\r\n\r\n", status->r_stat.name, request_header.data[UP_REQUEST_DATA]);
             socket = 1;
             break;
         case TURN:
-            snprintf(http_message, 50, "GET /state?id=abrogate2&az=%d HTTP/1.1\r\n\r\n", request_header.data[UP_REQUEST_DATA]);
+            snprintf(http_message, 50, "GET /twist?id=%s&az=%d HTTP/1.1\r\n\r\n", status->r_stat.name, request_header.data[UP_REQUEST_DATA]);
             socket = 1;
             break;
         case STOP:
-            snprintf(http_message, 50, "GET /state?id=abrogate2&lx=0 HTTP/1.1\r\n\r\n");
+            snprintf(http_message, 50, "GET /twist?id=%s&lx=0 HTTP/1.1\r\n\r\n", status->r_stat.name);
             socket = 1;
             break;
         default:
