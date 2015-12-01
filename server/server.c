@@ -337,7 +337,6 @@ int request_command(buffer* recv_buf, server_stat* status) {
     unsigned char* itr;      // iterator pointing to beginning of next data section to be sent to client
     int n, content_len;      // length of the http data section
     header request_header;   // header from the client
-    header response_header;  // header for messages to the client
     buffer* response;        // buffer to send to client
     int socket;              // index for which status.r_stat.http_sock[] to use
 
@@ -383,7 +382,6 @@ int request_command(buffer* recv_buf, server_stat* status) {
             break;
     }
 
-    
     // send the http request
     write(status->r_stat.http_sock[socket], http_message, strlen(http_message));
 
@@ -405,6 +403,11 @@ int request_command(buffer* recv_buf, server_stat* status) {
     // check for '200 OK'
     if (atoi(t) != 200) {
         fprintf(stderr, "error with http\n");
+        response = create_message(0, status->password,
+                HTTP_ERROR, 0, 0,
+                0, 0);
+        udp_send(response, status);
+        return 0;
     }
     
     // get length of data section of http message
@@ -414,31 +417,23 @@ int request_command(buffer* recv_buf, server_stat* status) {
         }
     }
 
-    // build the header
-    response_header.data[UP_VERSION] = 0;
-    response_header.data[UP_IDENTIFIER] = ((uint32_t*)(recv_buf->data))[1];
-    response_header.data[UP_CLIENT_REQUEST] = ((uint32_t*)(recv_buf->data))[2];
-    response_header.data[UP_REQUEST_DATA] = ((uint32_t*)(recv_buf->data))[3];
-    response_header.data[UP_BYTE_OFFSET] = 0;
-    response_header.data[UP_TOTAL_SIZE] = content_len;
-
     // start sending data
-    response = create_buffer(BUFFER_LEN);
     itr = (unsigned char*) data;
     while (content_len > 0) {
         // adjust the header
-        response_header.data[UP_BYTE_OFFSET] = (itr - data);
-        response_header.data[UP_PAYLOAD_SIZE] = (content_len - UP_MAX_PAYLOAD) > 0 ? UP_MAX_PAYLOAD:content_len;
+        response = create_message(0, status->password,
+                request_header.data[UP_CLIENT_REQUEST],
+                0, (itr - data), content_len,
+                ((content_len - UP_MAX_PAYLOAD) > 0 ?UP_MAX_PAYLOAD:content_len));
 
         // pack the header
-        insert_header(response, response_header);
-        fprintf(stderr, "appending %d bytes to %d bytes in %d-sized buffer\n", response_header.data[UP_PAYLOAD_SIZE], response->len, response->size);
+        fprintf(stderr, "appending %d bytes to %d bytes in %d-sized buffer\n", ((header*)(response))->data[UP_PAYLOAD_SIZE], response->len, response->size);
         // pack the data
-        append_buffer(response, itr, response_header.data[UP_PAYLOAD_SIZE]);
+        append_buffer(response, itr, ((header*)(response))->data[UP_PAYLOAD_SIZE]);
         
         // adjust pointer and amount of data left to send
-        itr += response_header.data[UP_PAYLOAD_SIZE];
-        content_len -= response_header.data[UP_PAYLOAD_SIZE];
+        itr += ((header*)(response))->data[UP_PAYLOAD_SIZE];
+        content_len -= ((header*)(response))->data[UP_PAYLOAD_SIZE];
 
         // send to client
         int num = udp_send(response, status);
