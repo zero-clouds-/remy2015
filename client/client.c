@@ -39,7 +39,7 @@ buffer* compile_file(int sock, struct addrinfo* serv_addr) {
         ++chunks;
         fprintf(stderr, "%d byte datagram received\n", buf->len);
     } while (total_bytes_recv == 0 || total_bytes_recv < full_payload->len);
-    fprintf(stdout, "%d bytes of data received in %d chunks\n", full_payload->len, chunks);
+    fprintf(stdout, "%d bytes of data received in %d chunks\n", total_bytes_recv - (chunks * 28), chunks);
     delete_buffer(buf);
     return full_payload;
 }
@@ -59,6 +59,8 @@ buffer* receive_request(int sock, struct addrinfo* serv_addr) {
     if (buf->len < 0) error("recvfrom()");
     return buf;
 }
+
+void get_thing(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t command);
 
 int main(int argc, char** argv) {
     int port, sock;
@@ -90,10 +92,22 @@ int main(int argc, char** argv) {
         /* TODO: if fail somehow, call continue */
         break;
     }
-    send_request(sock, serv_addr, password, GPS, 0);
+    get_thing(sock, serv_addr, password, GPS);
+    get_thing(sock, serv_addr, password, dGPS);
+    get_thing(sock, serv_addr, password, LASERS);
+
+    send_request(sock, serv_addr, password, QUIT, 0);
+    close(sock);
+    freeaddrinfo(serv_addr);
+    return 0;
+}
+
+void get_thing(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t command) {
+    // GSP GET
+    send_request(sock, serv_addr, password, command, 0);
     buffer* buf = receive_request(sock, serv_addr);
     header h = extract_header(buf);
-    if (h.data[UP_CLIENT_REQUEST] != GPS) error("invalid acknowledgement");
+    if (h.data[UP_CLIENT_REQUEST] != command) error("invalid acknowledgement");
     delete_buffer(buf);
     buffer* full_payload = compile_file(sock, serv_addr);
     /* just print to stdout for the time being */
@@ -101,9 +115,4 @@ int main(int argc, char** argv) {
     fwrite(full_payload->data, full_payload->len, 1, stdout);
     fprintf(stdout, "\n====== END DATA ======\n");
     delete_buffer(full_payload);
-    send_request(sock, serv_addr, password, QUIT, 0);
-
-    close(sock);
-    freeaddrinfo(serv_addr);
-    return 0;
 }
