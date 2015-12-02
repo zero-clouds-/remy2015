@@ -388,13 +388,16 @@ int request_command(buffer* recv_buf, server_stat* status) {
     // receive a response from the robot
     free(http_message);
     http_message = calloc(1000, 1);
-    n = read(status->r_stat.http_sock[socket], http_message, 272);
+    n = read(status->r_stat.http_sock[socket], http_message, 1000);
     if (n < 0) {
         fprintf(stderr, "read()\n");
     }
     
     printf("%s\n", http_message);
     // decipher http message
+    char *useless1, *useless2;
+    useless1 = strdup(http_message);
+    useless2 = strdup(http_message);
     strtok(http_message, " ");
     char* t = strtok(NULL, " ");
     
@@ -409,9 +412,6 @@ int request_command(buffer* recv_buf, server_stat* status) {
     }
 
     // get length of data section of http message
-    char *useless1, *useless2;
-    useless1 = strdup(http_message);
-    useless2 = strdup(http_message);
     if ((content_len = http_get_content_length(useless1)) == 0) {
         content_len = (strstr(useless2, "\r\n\r\n") - useless2) + 4;
     }
@@ -463,6 +463,7 @@ int request_command(buffer* recv_buf, server_stat* status) {
  */
 int http_get_content_length(char* http_msg) {
     char* t;
+    printf("%s\n", http_msg);
     if ((t = strstr(http_msg, "Content-Length:")) != NULL) {
         strtok(t, " ");
         return atoi(strtok(NULL, "\r\n"));
