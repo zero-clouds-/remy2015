@@ -332,7 +332,6 @@ void quit(buffer* recv_buf, server_stat* status) {
  */
 int request_command(buffer* recv_buf, server_stat* status) {
     char* http_message;      // used to hold http message from robot
-    char* temp;
     unsigned char* data;     // points to the data section of http_message
     unsigned char* itr;      // iterator pointing to beginning of next data section to be sent to client
     int n, content_len;      // length of the http data section
@@ -378,6 +377,7 @@ int request_command(buffer* recv_buf, server_stat* status) {
             break;
         default:
             fprintf(stderr, "invalid client request\n");
+            free(http_message);
             return -2;
             break;
     }
@@ -388,20 +388,15 @@ int request_command(buffer* recv_buf, server_stat* status) {
     // receive a response from the robot
     free(http_message);
     http_message = calloc(1000, 1);
-    temp = calloc(1000, 1);
-    int off = 0;
     n = read(status->r_stat.http_sock[socket], http_message, 272);
     if (n < 0) {
         fprintf(stderr, "read()\n");
     }
     
-    char *useless1, *useless2;
-    useless1 = strdup(http_message);
-    useless2 = strdup(http_message);
     printf("%s\n", http_message);
     // decipher http message
-    char *t = strtok(http_message, " ");
-    t = strtok(NULL, " ");
+    strtok(http_message, " ");
+    char* t = strtok(NULL, " ");
     
     // check for '200 OK'
     if (atoi(t) != 200) {
@@ -414,6 +409,9 @@ int request_command(buffer* recv_buf, server_stat* status) {
     }
 
     // get length of data section of http message
+    char *useless1, *useless2;
+    useless1 = strdup(http_message);
+    useless2 = strdup(http_message);
     if ((content_len = http_get_content_length(useless1)) == 0) {
         content_len = (strstr(useless2, "\r\n\r\n") - useless2) + 4;
     }
@@ -454,6 +452,8 @@ int request_command(buffer* recv_buf, server_stat* status) {
         header_size = 0;
     }
     free(http_message);
+    free(useless1);
+    free(useless2);
     return 1;
 }
 
