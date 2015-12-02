@@ -12,6 +12,7 @@
 
 #include <unistd.h>
 
+//deminsions of custom protocol
 #define UP_HEADER_LEN 28
 #define UP_MAX_PAYLOAD 272
 #define UP_VERSION 0

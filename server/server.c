@@ -26,7 +26,9 @@ typedef struct serverstatus_info {
 } server_stat;
 
 
-// connects to the specified host and returns the socket identifier
+/* 
+* connects to the specified host and returns the socket identifier
+*/
 int tcp_connect(char const* server_name, int port) {
     int sock;
     if ((sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
@@ -45,7 +47,9 @@ int tcp_connect(char const* server_name, int port) {
     return sock;
 }
 
-// binds to the specified port and returns the socket identifier
+/*
+* binds to the specified port and returns the socket identifier
+*/
 int udp_server(char const* port_name) {
     int sock;
     struct addrinfo addr_criteria;
@@ -78,6 +82,9 @@ int request_command(buffer* recv_buf, server_stat* status);
 int http_get_content_length(char* http_msg);
 unsigned char* http_get_data(char* http_msg, int length);
 
+/*
+* Main function
+*/
 int main(int argc, char** argv) {
     struct timeval t_out;
     int i, iflag, hflag, nflag, pflag;
