@@ -12,7 +12,8 @@
 
 typedef struct robot_info {
     int id;
-    int http_sock[4]; // 0 = image, 1 = GPS/move/turn/stop, 2 = Lasers, 3 = dGPS
+    int http_sock;
+    char hostname[BUFFER_LEN];
     char* name;
 } robot_stat;
 
@@ -89,8 +90,8 @@ int main(int argc, char** argv) {
     struct timeval t_out;
     int i, iflag, hflag, nflag, pflag;
     server_stat status;
-    char *port, hostname[BUFFER_LEN];
-    hostname[0] = '\0';
+    char *port;
+    status.r_stat.hostname[0] = '\0';
     if (argc != 9) {
         fprintf(stderr, "usage: %s -i <robot_id> -n <robot-name> -h <http_hostname> -p <udp_port>\n", argv[0]);
         return -1;
@@ -103,7 +104,7 @@ int main(int argc, char** argv) {
             status.r_stat.id = atoi(argv[i + 1]);
             iflag = 1;
         } else if (strcmp(argv[i], "-h") == 0) {
-            strncpy(hostname, argv[i + 1], BUFFER_LEN - 1);
+            strncpy(status.r_stat.hostname, argv[i + 1], BUFFER_LEN - 1);
             hflag = 1;
         } else if (strcmp(argv[i], "-p") == 0) {
             port = argv[i + 1];
@@ -121,11 +122,7 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    // set up the sockets
-    status.r_stat.http_sock[0] = tcp_connect(hostname, IMAGE_PORT);
-    status.r_stat.http_sock[1] = tcp_connect(hostname, GPS_PORT);
-    status.r_stat.http_sock[2] = tcp_connect(hostname, LASERS_PORT);
-    status.r_stat.http_sock[3] = tcp_connect(hostname, dGPS_PORT);
+    // set up the udp socket
     status.udp_sock = udp_server(port);
 
     // timeouts
@@ -191,10 +188,6 @@ void protocol1(buffer* recv_buf, server_stat* status){
     timeout_0.tv_sec = 0;
     timeout_0.tv_usec = 0;
 
-    timeout_setup(status->r_stat.http_sock[0], timeout);
-    timeout_setup(status->r_stat.http_sock[1], timeout);
-    timeout_setup(status->r_stat.http_sock[2], timeout);
-    timeout_setup(status->r_stat.http_sock[3], timeout);
     timeout_setup(status->udp_sock, timeout);
 
     // giant mess of conditionals
@@ -337,7 +330,6 @@ int request_command(buffer* recv_buf, server_stat* status) {
     int n, content_len;      // length of the http data section
     header request_header;   // header from the client
     buffer* response;        // buffer to send to client
-    int socket;              // index for which status.r_stat.http_sock[] to use
 
     // acknowledgement of command to client
     udp_send(recv_buf, status);
@@ -347,33 +339,39 @@ int request_command(buffer* recv_buf, server_stat* status) {
     http_message = calloc(1000, 1);
     switch (request_header.data[UP_CLIENT_REQUEST]) {
         case IMAGE:
+            printf("contacting image port\n");
             snprintf(http_message, 100, "GET /snapshot?topic=/robot_%d/image?width=600?height=500 HTTP/1.1\r\n\r\n", status->r_stat.id);
-            socket = 0;
+            status->r_stat.http_sock = tcp_connect(status->r_stat.hostname, IMAGE_PORT);
             break;
         case GPS:
             printf("contacting gps port\n");
             snprintf(http_message, 100, "GET /state?id=%s HTTP/1.1\r\n\r\n", status->r_stat.name);
-            socket = 1;
+            status->r_stat.http_sock = tcp_connect(status->r_stat.hostname, GPS_PORT);
             break;
         case LASERS:
+            printf("contacting lasers port\n");
             snprintf(http_message, 100, "GET /state?id=%s HTTP/1.1\r\n\r\n", status->r_stat.name);
-            socket = 2;
+            status->r_stat.http_sock = tcp_connect(status->r_stat.hostname, LASERS_PORT);
             break;
         case dGPS:
+            printf("contacting dgps port\n");
             snprintf(http_message, 100, "GET /state?id=%s HTTP/1.1\r\n\r\n", status->r_stat.name);
-            socket = 3;
+            status->r_stat.http_sock = tcp_connect(status->r_stat.hostname, dGPS_PORT);
             break;
         case MOVE:
+            printf("contacting move port\n");
             snprintf(http_message, 100, "GET /twist?id=%s&lx=%d HTTP/1.1\r\n\r\n", status->r_stat.name, request_header.data[UP_REQUEST_DATA]);
-            socket = 1;
+            status->r_stat.http_sock = tcp_connect(status->r_stat.hostname, GPS_PORT);
             break;
         case TURN:
+            printf("contacting turn port\n");
             snprintf(http_message, 100, "GET /twist?id=%s&az=%d HTTP/1.1\r\n\r\n", status->r_stat.name, request_header.data[UP_REQUEST_DATA]);
-            socket = 1;
+            status->r_stat.http_sock = tcp_connect(status->r_stat.hostname, GPS_PORT);
             break;
         case STOP:
+            printf("contacting stop port\n");
             snprintf(http_message, 100, "GET /twist?id=%s&lx=0 HTTP/1.1\r\n\r\n", status->r_stat.name);
-            socket = 1;
+            status->r_stat.http_sock = tcp_connect(status->r_stat.hostname, GPS_PORT);
             break;
         default:
             fprintf(stderr, "invalid client request\n");
@@ -383,17 +381,17 @@ int request_command(buffer* recv_buf, server_stat* status) {
     }
 
     // send the http request
-    write(status->r_stat.http_sock[socket], http_message, strlen(http_message));
+    write(status->r_stat.http_sock, http_message, strlen(http_message));
 
     // receive a response from the robot
     free(http_message);
     http_message = calloc(1000, 1);
-    n = read(status->r_stat.http_sock[socket], http_message, 1000);
+    n = read(status->r_stat.http_sock, http_message, 1000);
     if (n < 0) {
         fprintf(stderr, "read()\n");
     }
     
-    printf("%s\n", http_message);
+    printf("\nReceived:\n%s\n", http_message);
     // decipher http message
     char *useless1, *useless2;
     useless1 = strdup(http_message);
@@ -419,7 +417,7 @@ int request_command(buffer* recv_buf, server_stat* status) {
         fprintf(stderr, "http_get_data()\n");
     }
 
-    printf("%d\n", content_len);
+    printf("Data: %s\n", data);
 
     // start sending data
     itr = (unsigned char*) data;
@@ -448,7 +446,7 @@ int request_command(buffer* recv_buf, server_stat* status) {
         printf("size sent: %d\n", num);
         // clean up
         free(response);
-        n = read(status->r_stat.http_sock[socket], http_message, 272);
+        n = read(status->r_stat.http_sock, http_message, 272);
         header_size = 0;
     }
     free(http_message);
@@ -463,7 +461,6 @@ int request_command(buffer* recv_buf, server_stat* status) {
  */
 int http_get_content_length(char* http_msg) {
     char* t;
-    printf("%s\n", http_msg);
     if ((t = strstr(http_msg, "Content-Length:")) != NULL) {
         strtok(t, " ");
         return atoi(strtok(NULL, "\r\n"));
