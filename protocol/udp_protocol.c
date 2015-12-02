@@ -1,15 +1,25 @@
 #include "udp_protocol.h"
 
+/*
+* 
+*/
 void insert_header(buffer* datagram, header h) {
   memcpy(datagram->data, h.data, UP_HEADER_LEN);
   datagram->len = UP_HEADER_LEN;
 }
+
+/*
+*
+*/
 header extract_header(buffer* datagram) {
   header h;
   memcpy(h.data, datagram->data, UP_HEADER_LEN);
   return h;
 }
 
+/*
+*
+*/
 // note that this overwrites the contents of dst; dst must be at least 316 bytes long
 void separate_datagram(buffer* dst, buffer* src, int offset, int len) {
   header h;
@@ -22,12 +32,17 @@ void separate_datagram(buffer* dst, buffer* src, int offset, int len) {
   insert_header(dst, h);
 }
 
-// note tha src is the incoming datagram in this case
+/*
+* note tha src is the incoming datagram in this case
+*/
 void assemble_datagram(buffer* dst, buffer* src) {
   header h = extract_header(src);
   memcpy(dst->data + h.data[UP_BYTE_OFFSET], src->data + UP_HEADER_LEN, h.data[UP_PAYLOAD_SIZE]);
 }
 
+/*
+*
+*/
 buffer* create_message(uint32_t version, uint32_t id, uint32_t request, uint32_t data, uint32_t offset, uint32_t total_size, uint32_t payload) {
   buffer* message = create_buffer((UP_HEADER_LEN + payload) * sizeof(unsigned char));
   uint32_t header[7];
