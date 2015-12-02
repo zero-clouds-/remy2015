@@ -21,7 +21,7 @@ int connect_udp(char const* hostname, char const* port_name, struct addrinfo* se
     addr_criteria.ai_protocol = IPPROTO_UDP; 
 
     // decipher hostname
-    if (getaddrinfo(hostname, port_name, &addr_criteria, serv_addr)) {
+    if (getaddrinfo(hostname, port_name, &addr_criteria, &serv_addr)) {
         error("getaddrinfo()");
     }
     
@@ -75,7 +75,7 @@ buffer* compile_file(int sock, struct addrinfo* serv_addr) {
     }
 
     // confirmation of total transfer
-    fprintf(stdout, "%d bytes of data received in %d chunks\n", total_bytes_recv - (chunks * 28), chunks);
+    fprintf(stdout, "%d bytes of data received in %d chunks\n", ((int)(total_bytes_recv - (chunks * 28))), chunks);
 
     // clean up
     delete_buffer(buf);
@@ -137,7 +137,7 @@ int main(int argc, char** argv) {
 
     // setup basics
     hostname[0] = '\0';
-    snprintf(usage, "usage: %s -h <udp_hostname> -p <udp_port> -n <number_of_sides> -l <length_of_sides>\n", argv[0]);
+    snprintf(usage, BUFFER_LEN, "usage: %s -h <udp_hostname> -p <udp_port> -n <number_of_sides> -l <length_of_sides>\n", argv[0]);
 
     // read in arguments
     if (argc != 9) {
@@ -146,7 +146,7 @@ int main(int argc, char** argv) {
 
     // read in the required arguments
     hflag = pflag = nflag = lflag = 0;
-    for (i = 1; i < argc, i += 2) {
+    for (i = 1; i < argc; i += 2) {
         if (strcmp(argv[i], "-h") == 0) {
             strncpy(hostname, argv[i + 1], BUFFER_LEN - 1);
             hflag = 1;
@@ -171,6 +171,7 @@ int main(int argc, char** argv) {
     if (port == 0) {
         error("port number");
     }
+    serv_addr = NULL;
     sock = connect_udp(hostname, argv[2], serv_addr);
 
     // request connection to server
