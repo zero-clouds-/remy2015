@@ -214,9 +214,6 @@ int main(int argc, char** argv) {
             }
         }
     } else {
-        //example of move_robot below for N and N-1
-        //move_robot(sides, lengths, sock, serv_addr, password);
-        //move_robot(sides - 1, lengths, sock, serv_addr, password);
     }
 
     //example of move_robot below for N and N-1 - check out the first example, it works
@@ -273,7 +270,8 @@ void get_thing(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t
  * writes data to a given file rather than standard out, otherwise the same as
  * getthing()  
  */
-void write_data_to_file(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t command) {
+void write_data_to_file(int vertex, int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t command) {
+    
     uint32_t data = 0;
     send_request(sock, serv_addr, password, command, data);
     buffer* buf = receive_request(sock, serv_addr);
@@ -285,33 +283,37 @@ void write_data_to_file(int sock, struct addrinfo* serv_addr, uint32_t password,
     buffer* full_payload = compile_file(sock, serv_addr);
     
     /* print to timestamped file */
-    char * sensor_type;
-    char * time_stamp;
+    char * sensor_type = (char *)(malloc(16)); //max size
+    char * time_stamp = (char *)malloc(25); //format: Sun Aug 19 02:56:02 2012 = 24 chars 
     char * filename;
 
     switch(command) {
         case IMAGE:
-            sensor_type = "IMAGE";
+            sprintf(sensor_type, "Vertex%d-IMAGE-", vertex);
+            break;
+        case STOP: 
+            //not technically valid, but it returns GPS anyway so 
+            //saves us from sending a redundant GPS request
+            sprintf(sensor_type, "Vertex%d-GPS-", vertex);    
             break;
         case GPS:
-            sensor_type = "GPS";
+            sprintf(sensor_type, "Vertex%d-GPS-", vertex);  
             break;
         case dGPS:
-            sensor_type = "dGPS";
+            sprintf(sensor_type, "Vertex%d-dGPS-", vertex);  
             break;
         case LASERS:
-            sensor_type = "LASERS";
+            sprintf(sensor_type, "Vertex%d-LASERS-", vertex);  
             break;
         default: error("invalid sensor");
     }   
 
     time_t rawtime;
     struct tm * timeinfo;
-    time_stamp = (char *)malloc(30);
     
     time(&rawtime);
     timeinfo = localtime (&rawtime);                                                  
-    strftime(time_stamp, 30, "-%c",timeinfo);
+    strftime(time_stamp, 30, "%c",timeinfo);
     
     filename = (char *)malloc(strlen(sensor_type) + strlen(time_stamp) + 1);
     strcpy(filename, sensor_type);
@@ -326,9 +328,10 @@ void write_data_to_file(int sock, struct addrinfo* serv_addr, uint32_t password,
 /* void write_out_sensor_data 
 * write out all sensors to a timestamped file.
 */
-void write_out_sensor_data(int sock, struct addrinfo* serv_addr, uint32_t password) {
-        write_data_to_file(sock, serv_addr, password, GPS);
-        //other sensors to be taken care of later...
+void write_out_sensor_data(int vertex, int sock, struct addrinfo* serv_addr, uint32_t password) {
+        //first get robot to stop, and this gives us GPS data anyway
+        write_data_to_file(vertex, sock, serv_addr, password, STOP);
+        //other sensors to be added as we want them...
 }
 
 
@@ -345,27 +348,25 @@ void move_robot(int N, int L, int sock, struct addrinfo* serv_addr, uint32_t pas
     int i;
     for(i = 0; i < N; i++) {
         //move robot using get_thing
-        printf("robot moving...\n");
+        printf("* robot moving...\n");
         get_thing(sock, serv_addr, password, MOVE);
         if(usleep((moveSleepTime * 1000000)) < 0) 
             error("usleep(moveSleepTime)");
  
         //stop robot using get_thing
-        printf("robot stoping...\n");
+        printf("* robot stoping...\n");
         get_thing(sock, serv_addr, password, STOP);
 
         //turn robot using get_thing
-        printf("robot turning for %d seconds\n", turnSleepTime); 
+        printf("* robot turning for %d seconds...\n", turnSleepTime); 
         get_thing(sock, serv_addr, password, TURN);
         if(usleep((turnSleepTime * 1000000)) < 0) 
             error("usleep(turnSleepTime)");
 
-        //stop robot again
-        printf("robot has moved %d sides\n", (i + 1));
-        get_thing(sock, serv_addr, password, STOP);
+        //stop robot again, write data to sensors
+        printf("* robot stopping, has moved %d side(s)...\n", (i + 1));
+        write_out_sensor_data((i + 1), sock, serv_addr, password);
 
-        //write out information at the vertex
-        write_out_sensor_data(sock, serv_addr, password);
     } //repeat until shape is drawn 
-    printf("robot drew shape\n");
+    printf("* robot drew shape\n");
 }
