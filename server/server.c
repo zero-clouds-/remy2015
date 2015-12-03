@@ -155,15 +155,17 @@ int main(int argc, char** argv) {
             clear_buffer(recv_buf);
             append_buffer(recv_buf, temp, f);
             header msg_header = extract_header(recv_buf);
-            printf("\nMessage received\n");
-            printf("\tMessage size: %d\n", f);
+            fprintf(stdout, "\nMessage received\n");
+            fprintf(stdout, "\tMessage size: %d\n", f);
 
             // send to correct protocol
             void (*protocol_func)(buffer*, server_stat*);
             protocol_func = check_version(&msg_header) ? &protocol1:&protocol2;
             protocol_func(recv_buf, &status);
         }
-        printf("Waiting for a message\n");
+        fprintf(stdout, "Waiting for a message\n");
+        fflush(stdout);
+        fflush(stderr);
     }
     return 0;
 }
@@ -205,7 +207,7 @@ void protocol1(buffer* recv_buf, server_stat* status){
     if (status->connected == 0) {
         if (check_pass(&msg_header, 0)) {
             if (get_command(&msg_header) == CONNECT) {
-                printf("\tReplying with password\n");
+                fprintf(stdout, "\tReplying with password\n");
                 status->connected = 1;
                 msg_header.data[1] = status->password;
                 insert_header(recv_buf, msg_header);
@@ -223,7 +225,7 @@ void protocol1(buffer* recv_buf, server_stat* status){
             if (get_command(&msg_header) == CONNECT) {
                 status->connected = 2;
                 timeout_setup(status->udp_sock, timeout_0);
-                printf("\tConnected to a client\n");
+                fprintf(stdout, "\tConnected to a client\n");
             } else {
                 fprintf(stderr, "ERROR: Unexpected Command\n");
             }
@@ -265,13 +267,13 @@ void protocol2(buffer* recv_buffer, server_stat* status) {
 
 void print_header(buffer* buf) {
     header msg_header = extract_header(buf);
-    printf("Version:  %d\n", msg_header.data[UP_VERSION]);
-    printf("Password: %d\n", msg_header.data[UP_IDENTIFIER]);
-    printf("Request:  %d\n", msg_header.data[UP_CLIENT_REQUEST]);
-    printf("Data:     %d\n", msg_header.data[UP_REQUEST_DATA]);
-    printf("Offset:   %d\n", msg_header.data[UP_BYTE_OFFSET]);
-    printf("Total:    %d\n", msg_header.data[UP_TOTAL_SIZE]);
-    printf("Payload:  %d\n", msg_header.data[UP_PAYLOAD_SIZE]);
+    fprintf(stdout, "Version:  %d\n", msg_header.data[UP_VERSION]);
+    fprintf(stdout, "Password: %d\n", msg_header.data[UP_IDENTIFIER]);
+    fprintf(stdout, "Request:  %d\n", msg_header.data[UP_CLIENT_REQUEST]);
+    fprintf(stdout, "Data:     %d\n", msg_header.data[UP_REQUEST_DATA]);
+    fprintf(stdout, "Offset:   %d\n", msg_header.data[UP_BYTE_OFFSET]);
+    fprintf(stdout, "Total:    %d\n", msg_header.data[UP_TOTAL_SIZE]);
+    fprintf(stdout, "Payload:  %d\n", msg_header.data[UP_PAYLOAD_SIZE]);
 }
 
 /* int check_version
@@ -318,7 +320,7 @@ ssize_t udp_send(buffer* recv_buf, server_stat* status) {
  * Resets connection status
  */
 void quit(buffer* recv_buf, server_stat* status) {
-    printf("\tBreaking connection\n");
+    fprintf(stdout, "\tBreaking connection\n");
     udp_send(recv_buf, status);
     status->password = rand();
     status->connected = 0;
@@ -337,7 +339,7 @@ void quit(buffer* recv_buf, server_stat* status) {
 int request_command(buffer* recv_buf, server_stat* status) {
     unsigned char http_message[1000];      // used to hold http message from robot
     buffer* http_data = create_buffer(BUFFER_LEN);
-    int n;
+    int n, retries;
     header request_header;   // header from the client
     buffer* response;        // buffer to send to client
     struct timeval timeout;
@@ -345,7 +347,7 @@ int request_command(buffer* recv_buf, server_stat* status) {
     timeout.tv_sec = 1;
     timeout.tv_usec = 0;
 
-    printf("\tProcessing request\n");
+    fprintf(stdout, "\tProcessing request\n");
 
     // acknowledgement of command to client
     udp_send(recv_buf, status);
@@ -355,37 +357,37 @@ int request_command(buffer* recv_buf, server_stat* status) {
     request_header = extract_header(recv_buf);
     switch (request_header.data[UP_CLIENT_REQUEST]) {
         case IMAGE:
-            printf("\t\tContacting image port\n");
+            fprintf(stdout, "\t\tContacting image port\n");
             snprintf((char*)http_message, 100, "GET /snapshot?topic=/robot_%d/image?width=600?height=500 HTTP/1.1\r\n\r\n", status->r_stat.id);
             status->r_stat.http_sock = tcp_connect(status->r_stat.hostname, IMAGE_PORT);
             break;
         case GPS:
-            printf("\t\tContacting gps port\n");
+            fprintf(stdout, "\t\tContacting gps port\n");
             snprintf((char*)http_message, 100, "GET /state?id=%s HTTP/1.1\r\n\r\n", status->r_stat.name);
             status->r_stat.http_sock = tcp_connect(status->r_stat.hostname, GPS_PORT);
             break;
         case LASERS:
-            printf("\t\tContacting lasers port\n");
+            fprintf(stdout, "\t\tContacting lasers port\n");
             snprintf((char*)http_message, 100, "GET /state?id=%s HTTP/1.1\r\n\r\n", status->r_stat.name);
             status->r_stat.http_sock = tcp_connect(status->r_stat.hostname, LASERS_PORT);
             break;
         case dGPS:
-            printf("\t\tContacting dgps port\n");
+            fprintf(stdout, "\t\tContacting dgps port\n");
             snprintf((char*)http_message, 100, "GET /state?id=%s HTTP/1.1\r\n\r\n", status->r_stat.name);
             status->r_stat.http_sock = tcp_connect(status->r_stat.hostname, dGPS_PORT);
             break;
         case MOVE:
-            printf("\t\tContacting move port\n");
+            fprintf(stdout, "\t\tContacting move port\n");
             snprintf((char*)http_message, 100, "GET /twist?id=%s&lx=%d HTTP/1.1\r\n\r\n", status->r_stat.name, request_header.data[UP_REQUEST_DATA]);
             status->r_stat.http_sock = tcp_connect(status->r_stat.hostname, GPS_PORT);
             break;
         case TURN:
-            printf("\t\tContacting turn port\n");
+            fprintf(stdout, "\t\tContacting turn port\n");
             snprintf((char*)http_message, 100, "GET /twist?id=%s&az=%d HTTP/1.1\r\n\r\n", status->r_stat.name, request_header.data[UP_REQUEST_DATA]);
             status->r_stat.http_sock = tcp_connect(status->r_stat.hostname, GPS_PORT);
             break;
         case STOP:
-            printf("\t\tContacting stop port\n");
+            fprintf(stdout, "\t\tContacting stop port\n");
             snprintf((char*)http_message, 100, "GET /twist?id=%s&lx=0 HTTP/1.1\r\n\r\n", status->r_stat.name);
             status->r_stat.http_sock = tcp_connect(status->r_stat.hostname, GPS_PORT);
             break;
@@ -396,29 +398,41 @@ int request_command(buffer* recv_buf, server_stat* status) {
     }
 
     // send the http request
-    printf("\t\tWriting request to server\n");
+    fprintf(stdout, "\t\tWriting request to server\n");
     timeout_setup(status->r_stat.http_sock, timeout);
     write(status->r_stat.http_sock, (char*)http_message, strlen((char*)http_message));
 
     // read http message into a buffer
-    printf("\t\tReceiving reply from server\n");
+    fprintf(stdout, "\t\tReceiving reply from server\n");
     memset(http_message, '\0', 1000);
-    while ((n = read(status->r_stat.http_sock, (char*)http_message, 1000)) > 0) {
-        printf("\t\t\tReceived %d bytes\n", n);
+    retries = 0;
+    while (1) {
+        n = read(status->r_stat.http_sock, (char*)http_message, 1000);
+        if (n == -1) {
+            if (retries > 2) {
+                break;
+            }
+            retries++;
+            write(status->r_stat.http_sock, (char*)http_message, strlen((char*)http_message));
+            continue;
+        } else if (n == 0) {
+            break;
+        }
+        fprintf(stdout, "\t\t\tReceived %d bytes\n", n);
         append_buffer(http_data, (unsigned char*)http_message, n);
         memset(http_message, '\0', 1000);
     }
-    printf("\t\tTotal bytes received: %d\n", http_data->len);
+    fprintf(stdout, "\t\tTotal bytes received: %d\n", http_data->len);
 
 
     // see what we got
-    printf("\t\tAssembled Message:\n\n%s\n", http_data->data);
+    fprintf(stdout, "\t\tAssembled Message:\n\n%s\n", http_data->data);
 
     // check for '200 OK'
     char ret_code[4];
     memcpy(ret_code, http_data->data + 9, 3); // HTTP/1.1 <ret_code> ~~~~
     ret_code[3] = '\0';
-    printf("\t\tReturn code: %s\n", ret_code);
+    fprintf(stdout, "\t\tReturn code: %s\n", ret_code);
     if (atoi(ret_code) != 200) {
         fprintf(stderr, "ERROR: bad http request\n");
         response = create_message(0, status->password,
@@ -440,16 +454,16 @@ int request_command(buffer* recv_buf, server_stat* status) {
                 ((http_data->len - (a + http_header_len)) > UP_MAX_PAYLOAD ? UP_MAX_PAYLOAD:(http_data->len - (a + http_header_len))));
 
         append_buffer(response, http_data->data + a + http_header_len, UP_MAX_PAYLOAD);
-        printf("\n\t\tAssembled packet:\n");
+        fprintf(stdout, "\n\t\tAssembled packet:\n");
         print_header(response);
-        printf("%s\n", response->data + UP_HEADER_LEN);
-        printf("\t\tSending packet\n");
+        fprintf(stdout, "%s\n", response->data + UP_HEADER_LEN);
+        fprintf(stdout, "\t\tSending packet\n");
         udp_send(response, status);
-        printf("\t\tPacket sent\n");
+        fprintf(stdout, "\t\tPacket sent\n");
         delete_buffer(response);
         a += 272;
     }
-    printf("\t\tRequest complete!\n");
+    fprintf(stdout, "\t\tRequest complete!\n");
     return 1;
 }
 
