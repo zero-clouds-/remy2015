@@ -3,6 +3,7 @@
 #include <math.h> //for PI
 
 #define BUFFER_LEN 512
+#define TIMEOUT_SEC 1
 
 /* int connect_udp
  *   const char* hostname - hostname to connect to
@@ -41,6 +42,11 @@ buffer* compile_file(int sock, struct addrinfo* serv_addr) {
     
     header h;
     ssize_t total_bytes_recv = 0;
+
+    struct timeval timeout;
+    timeout.tv_sec = TIMEOUT_SEC;
+    timeout.tv_usec = 0;
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
     
     int chunks = 0;
     do {
@@ -59,6 +65,10 @@ buffer* compile_file(int sock, struct addrinfo* serv_addr) {
         total_bytes_recv += h.data[UP_PAYLOAD_SIZE];
     } while (total_bytes_recv == 0 || total_bytes_recv < full_payload->len);
     
+    timeout.tv_sec = 0;
+    timeout.tv_usec = 0;
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+
     fprintf(stdout, "%d bytes of data received in %d chunks\n", (int)total_bytes_recv, chunks);
     delete_buffer(buf);
     
@@ -73,7 +83,7 @@ buffer* compile_file(int sock, struct addrinfo* serv_addr) {
  * errors and dies if message could not be sent
  */
 void send_request(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t request, uint32_t data) {
-    buffer* message = create_message(0, password, request, data, 0, 0, 0);
+    buffer* message = create_message(0, password, request, 0, 0, 0, 0);
     fprintf(stdout, "sending request [%d:%d]\n", request, data);
     ssize_t bytes_sent = sendto(sock, message->data, message->len, 0, serv_addr->ai_addr, serv_addr->ai_addrlen);
     if (bytes_sent != UP_HEADER_LEN) error("sendto()");
@@ -204,12 +214,11 @@ int main(int argc, char** argv) {
                       "  help\n", stdout);
             }
         }
+    } else {
+        //example of move_robot below for N and N-1
+        //move_robot(sides, lengths, sock, serv_addr, password);
+        //move_robot(sides - 1, lengths, sock, serv_addr, password);
     }
-
-    //by this point the server is waiting for what to do    
-      get_thing(sock, serv_addr, password, GPS);
-      get_thing(sock, serv_addr, password, dGPS);
-      get_thing(sock, serv_addr, password, LASERS);
 
     //example of move_robot below for N and N-1 - check out the first example, it works
     //to watch the robot move: http://169.55.155.236:8081/stream?topic=/robot_11/image?width=600?height=500
