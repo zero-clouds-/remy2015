@@ -80,7 +80,6 @@ uint32_t       get_command             (const header* msg_header);
 ssize_t        udp_send                (buffer* recv_buffer, server_stat* status);
 void           quit                    (buffer* recv_buf, server_stat* status);
 int            request_command         (buffer* recv_buf, server_stat* status);
-int            http_get_content_length (char* http_msg);
 unsigned char* http_get_data           (unsigned char* http_msg);
 
 /*
@@ -241,6 +240,8 @@ void protocol1(buffer* recv_buf, server_stat* status){
         if (!check_pass(&msg_header, status->password)) {
             fprintf(stderr, "ERROR: Incorrect Password\n");
         } else {
+            fprintf(stdout, "\t\tReceived Message:\n");
+            print_header(recv_buf);
             switch (get_command(&msg_header)) {
                 case CONNECT:
                     fprintf(stderr, "ERROR: Unexpected Command\n");
@@ -430,14 +431,13 @@ int request_command(buffer* recv_buf, server_stat* status) {
     fprintf(stdout, "\t\tTotal bytes received: %d\n", http_data->len);
 
 
-    // see what we got
-    fprintf(stdout, "\t\tAssembled Message:\n\n%s\n", http_data->data);
+    // see what we go
+    fprintf(stdout, "\t\tAssembled Message:\n%s\n", http_data->data);
 
     // check for '200 OK'
     char ret_code[4];
     memcpy(ret_code, http_data->data + 9, 3); // HTTP/1.1 <ret_code> ~~~~
     ret_code[3] = '\0';
-    fprintf(stdout, "\t\tReturn code: %s\n", ret_code);
     if (atoi(ret_code) != 200) {
         fprintf(stderr, "ERROR: bad http request\n");
         response = create_message(0, status->password,
@@ -470,20 +470,6 @@ int request_command(buffer* recv_buf, server_stat* status) {
     }
     fprintf(stdout, "\t\tRequest complete!\n");
     return 1;
-}
-
-/* int http_get_content_length
- *   char* http_msg - array containing an http response from the robot
- * Returns the Content-Length field as an integer
- */
-int http_get_content_length(char* http_msg) {
-    char* t;
-    if ((t = strstr(http_msg, "Content-Length:")) != NULL) {
-        strtok(t, " ");
-        return atoi(strtok(NULL, "\r\n"));
-    }
-    fprintf(stderr, "ERROR: http_get_content_length()\n");
-    return -1;
 }
 
 /* unsigned char* http_get_data
