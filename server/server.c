@@ -91,9 +91,12 @@ int main(int argc, char** argv) {
     int i, iflag, hflag, nflag, pflag;
     server_stat status;
     char *port;
+    char usage[100];
+
+    snprintf(usage, 100, "usage: %s -i <robot_id> -n <robot-name> -h <http_hostname> -p <udp_port>", argv[0]);
     status.r_stat.hostname[0] = '\0';
     if (argc != 9) {
-        fprintf(stderr, "usage: %s -i <robot_id> -n <robot-name> -h <http_hostname> -p <udp_port>\n", argv[0]);
+        fprintf(stderr, "%s\n", usage);
         return -1;
     }
 
@@ -113,12 +116,12 @@ int main(int argc, char** argv) {
             status.r_stat.name = argv[i + 1];
             nflag = 1;
         }else {
-            fprintf(stderr, "usage: %s -i <robot_id> -h <http_hostname> -n <robot_name> -p <udp_port>\n", argv[0]);
+            fprintf(stderr, "%s\n", usage);
             return -1;
         }
     }
     if (!(iflag && hflag && nflag && pflag)) {
-        fprintf(stderr, "usage: %s -i <robot_id> -h <http_hostname> -n <robot_name> -p <udp_port>\n", argv[0]);
+        fprintf(stderr, "%s\n", usage);
         return -1;
     }
 
@@ -149,7 +152,8 @@ int main(int argc, char** argv) {
             clear_buffer(recv_buf);
             append_buffer(recv_buf, temp, f);
             header msg_header = extract_header(recv_buf);
-            printf("size received: %d\n", f);
+            printf("message received\n");
+            printf("message size: %d\n", f);
 
             // send to correct protocol
             void (*protocol_func)(buffer*, server_stat*);
@@ -387,7 +391,7 @@ int request_command(buffer* recv_buf, server_stat* status) {
     // receive a response from the robot
     free(http_message);
     http_message = calloc(1000, 1);
-    n = read(status->r_stat.http_sock, http_message, 1000);
+    n = read(status->r_stat.http_sock, http_message, 272);
     if (n < 0) {
         fprintf(stderr, "read()\n");
     }
@@ -431,17 +435,18 @@ int request_command(buffer* recv_buf, server_stat* status) {
         printf("size to send: %d\n", p_size);
         response = create_message(0, status->password,
                 request_header.data[UP_CLIENT_REQUEST],
-                0, (itr - data), content_len,
+                0, (content_len - amount_to_send), content_len,
                 p_size);
+
         // pack the header
         fprintf(stderr, "appending %d bytes to %d bytes in %d-sized buffer\n", ((uint32_t*)(response->data))[UP_PAYLOAD_SIZE], response->len, response->size);
+
         // pack the data
         append_buffer(response, itr, ((uint32_t*)(response->data))[UP_PAYLOAD_SIZE]);
         printf("Payload size is: %d\n", ((uint32_t*)(response->data))[UP_PAYLOAD_SIZE]);
         
         // adjust pointer and amount of data left to send
         printf("Data section of client message: %s\n", itr);
-        itr += ((uint32_t*)(response->data))[UP_PAYLOAD_SIZE];
         amount_to_send -= ((uint32_t*)(response->data))[UP_PAYLOAD_SIZE];
 
         // send to client
@@ -453,6 +458,7 @@ int request_command(buffer* recv_buf, server_stat* status) {
         memset(http_message, '\0', 1000);
         n = read(status->r_stat.http_sock, http_message, 272);
         printf("other data: %s\n", http_message);
+        itr = (unsigned char*)http_message;
         header_size = 0;
     }
     free(http_message);
