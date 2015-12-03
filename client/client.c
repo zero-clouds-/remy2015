@@ -1,6 +1,7 @@
 #include "../protocol/utility.h"
 #include "../protocol/udp_protocol.h"
 #include <math.h> //for PI
+#include <time.h> //for timestamp
 
 #define BUFFER_LEN 512
 #define TIMEOUT_SEC 1
@@ -222,7 +223,7 @@ int main(int argc, char** argv) {
 
     //example of move_robot below for N and N-1 - check out the first example, it works
     //to watch the robot move: http://169.55.155.236:8081/stream?topic=/robot_11/image?width=600?height=500
-    //move_robot(sides, lengths, sock, serv_addr, password);
+    move_robot(sides, lengths, sock, serv_addr, password);
     //move_robot(sides - 1, lengths, sock, serv_addr, password);
 
     //done requesting, quit
@@ -257,13 +258,81 @@ void get_thing(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t
     delete_buffer(buf);
     buffer* full_payload = compile_file(sock, serv_addr);
     
-    /* just print to stdout for the time being */
+    /* just print to timestamped file */
     fprintf(stdout, "===== BEGIN DATA =====\n");
     fwrite(full_payload->data, full_payload->len, 1, stdout);
     fprintf(stdout, "\n====== END DATA ======\n");
     
     delete_buffer(full_payload);
 }
+
+/* write_data_to_file
+ *   int sock - socket to communicate over
+ *   struct addrinfo* serv_addr
+ *   uint32_t password - used by proxy to identify this client
+ *   uint32_t command - request being made to the proxy
+ *
+ * writes data to a given file rather than standard out, otherwise the same as
+ * getthing()  
+ */
+void write_data_to_file(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t command) {
+    uint32_t data = 0;
+    send_request(sock, serv_addr, password, command, data);
+    buffer* buf = receive_request(sock, serv_addr);
+    header h = extract_header(buf);
+    
+    if (h.data[UP_CLIENT_REQUEST] != command) error("invalid acknowledgement");
+    
+    delete_buffer(buf);
+    buffer* full_payload = compile_file(sock, serv_addr);
+    
+    /* print to timestamped file */
+    char * sensor_type;
+    char * time_stamp;
+    char * filename;
+
+    switch(command) {
+        case IMAGE:
+            sensor_type = "IMAGE";
+            break;
+        case GPS:
+            sensor_type = "GPS";
+            break;
+        case dGPS:
+            sensor_type = "dGPS";
+            break;
+        case LASERS:
+            sensor_type = "LASERS";
+            break;
+        default: error("invalid sensor");
+    }   
+
+    time_t rawtime;
+    struct tm * timeinfo;
+    time_stamp = (char *)malloc(30);
+    
+    time(&rawtime);
+    timeinfo = localtime (&rawtime);                                                  
+    strftime(time_stamp, 30, "-%c",timeinfo);
+    
+    filename = (char *)malloc(strlen(sensor_type) + strlen(time_stamp) + 1);
+    strcpy(filename, sensor_type);
+    strcat(filename, time_stamp);
+ 
+    write_buffer(full_payload, filename);
+    delete_buffer(full_payload);
+    printf("%s written out...\n", sensor_type);
+}
+
+
+/* void write_out_sensor_data 
+* write out all sensors to a timestamped file.
+*/
+void write_out_sensor_data(int sock, struct addrinfo* serv_addr, uint32_t password) {
+        write_data_to_file(sock, serv_addr, password, GPS);
+        //other sensors to be taken care of later...
+}
+
 
 /* void move_robot
 * Moves robot of a shape N by continually sending move, turn, and stop requests
@@ -276,7 +345,7 @@ void move_robot(int N, int L, int sock, struct addrinfo* serv_addr, uint32_t pas
     unsigned moveSleepTime = L;
 
     int i;
-    for(i = 0; i < N; i++) {
+    for(i = 0; i < 1; i++) {
         //move robot using get_thing
         printf("robot moving...\n");
         get_thing(sock, serv_addr, password, MOVE);
@@ -296,6 +365,9 @@ void move_robot(int N, int L, int sock, struct addrinfo* serv_addr, uint32_t pas
         //stop robot again
         printf("robot has moved %d sides\n", (i + 1));
         get_thing(sock, serv_addr, password, STOP);
+
+        //write out information at the vertex
+        write_out_sensor_data(sock, serv_addr, password);
     } //repeat until shape is drawn 
     printf("robot drew shape\n");
 }
