@@ -194,6 +194,7 @@ void protocol1(buffer* recv_buf, server_stat* status){
     fprintf(stdout, "version 1 protocol\n");
     int error = 0;
     header msg_header = extract_header(recv_buf);
+    printf("Password received: %d\n", msg_header.data[UP_IDENTIFIER]);
     if (status->connected == 0) {
         if (check_pass(&msg_header, 0)) {
             if (get_command(&msg_header) == CONNECT) {
@@ -205,10 +206,10 @@ void protocol1(buffer* recv_buf, server_stat* status){
                     fprintf(stderr, "sendto()\n");
                 }
             } else {
-                printf("ignore1\n");
+                printf("Unexpected Command\n");
             }
         } else {
-            printf("ignore2\n");
+            printf("Incorrect Password, should be: 0\n");
         }
     } else if (status->connected == 1) {
         if (check_pass(&msg_header, status->password)) {
@@ -217,18 +218,18 @@ void protocol1(buffer* recv_buf, server_stat* status){
                 timeout_setup(status->udp_sock, timeout_0);
                 printf("Connected to a client\n");
             } else {
-                printf("ignore3\n");
+                printf("Unexpected Command\n");
             }
         } else {
-            printf("ignore4\n");
+            printf("Incorrect Password, should be: %d\n", status->password);
         }
     } else {
         if (!check_pass(&msg_header, status->password)) {
-            printf("ignore5\n");
+            printf("Incorrect Password, should be: %d\n", status->password);
         } else {
             switch (get_command(&msg_header)) {
                 case CONNECT:
-                    printf("ignore6\n");
+                    printf("Unexpected Command\n");
                     break;
                 case QUIT:
                     quit(recv_buf, status);
@@ -411,18 +412,19 @@ int request_command(buffer* recv_buf, server_stat* status) {
 
     // get length of data section of http message
     if ((content_len = http_get_content_length(useless1)) == 0) {
-        content_len = (strstr(useless2, "\r\n\r\n") - useless2) + 4;
+        content_len = n - (strstr(useless2, "\r\n\r\n") - useless2);
     }
     if ((data = http_get_data(useless2, content_len)) == NULL) {
         fprintf(stderr, "http_get_data()\n");
     }
 
+    // data come out correctly here, check in while loop
     printf("Data: %s\n", data);
 
     // start sending data
     itr = (unsigned char*) data;
     int amount_to_send = content_len;
-    int header_size = itr - (unsigned char*)useless2;
+    int header_size = data - (unsigned char*)useless2;
     while (amount_to_send > 0) {
         // adjust the header
         uint32_t p_size = n - header_size;
@@ -435,8 +437,10 @@ int request_command(buffer* recv_buf, server_stat* status) {
         fprintf(stderr, "appending %d bytes to %d bytes in %d-sized buffer\n", ((uint32_t*)(response->data))[UP_PAYLOAD_SIZE], response->len, response->size);
         // pack the data
         append_buffer(response, itr, ((uint32_t*)(response->data))[UP_PAYLOAD_SIZE]);
+        printf("Payload size is: %d\n", ((uint32_t*)(response->data))[UP_PAYLOAD_SIZE]);
         
         // adjust pointer and amount of data left to send
+        printf("Data section of client message: %s\n", itr);
         itr += ((uint32_t*)(response->data))[UP_PAYLOAD_SIZE];
         amount_to_send -= ((uint32_t*)(response->data))[UP_PAYLOAD_SIZE];
 
@@ -446,7 +450,9 @@ int request_command(buffer* recv_buf, server_stat* status) {
         printf("size sent: %d\n", num);
         // clean up
         free(response);
+        memset(http_message, '\0', 1000);
         n = read(status->r_stat.http_sock, http_message, 272);
+        printf("other data: %s\n", http_message);
         header_size = 0;
     }
     free(http_message);
@@ -474,7 +480,7 @@ int http_get_content_length(char* http_msg) {
  * Returns a pointer to the beginning of the data section of the http_message
  */
 unsigned char* http_get_data(char* http_msg, int length) {
-    char *t;
+    char *t = NULL;
     if ((t = strstr(http_msg, "\r\n\r\n")) != NULL) {
         t += strlen("\r\n\r\n");
         return (unsigned char*)t;
