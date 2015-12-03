@@ -12,7 +12,7 @@ FILE CONTENTS
 -------------------------------------------------------------------------------  
 I. GROUP MEMBERS
 -------------------------------------------------------------------------------
-* Group Members: 
+* Group Members: Josh Gates, Grace Glenn, Ben Green, Andrew Zhang
 * Project Name: Robot Proxy Client and Server
 * Due Date: Friday, December 4th, 2015, 2:30 pm
 

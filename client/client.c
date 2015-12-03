@@ -43,7 +43,7 @@ buffer* compile_file(int sock, struct addrinfo* serv_addr) {
     ssize_t total_bytes_recv = 0;
 
     struct timeval timeout;
-    timeout.tv_sec = TIMEOUT_SEC;
+    timeout.tv_sec = 5; // large timeout here to compensate for server having to wait for robot and then process response before sending back
     timeout.tv_usec = 0;
     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
     
