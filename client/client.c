@@ -83,7 +83,7 @@ buffer* compile_file(int sock, struct addrinfo* serv_addr) {
  * errors and dies if message could not be sent
  */
 void send_request(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t request, uint32_t data) {
-    buffer* message = create_message(0, password, request, 0, 0, 0, 0);
+    buffer* message = create_message(0, password, request, data, 0, 0, 0);
     fprintf(stdout, "sending request [%d:%d]\n", request, data);
     ssize_t bytes_sent = sendto(sock, message->data, message->len, 0, serv_addr->ai_addr, serv_addr->ai_addrlen);
     if (bytes_sent != UP_HEADER_LEN) error("sendto()");
