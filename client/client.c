@@ -58,7 +58,7 @@ buffer* compile_file(int sock, struct addrinfo* serv_addr) {
         total_bytes_recv += h.data[UP_PAYLOAD_SIZE];
     } while (total_bytes_recv == 0 || total_bytes_recv < full_payload->len);
     
-    fprintf(stdout, "%d bytes of data received in %d chunks\n", (int)total_bytes_recv - (chunks * 28), (int)chunks);
+    fprintf(stdout, "%d bytes of data received in %d chunks\n", (int)total_bytes_recv, chunks);
     delete_buffer(buf);
     
     return full_payload;
@@ -170,38 +170,37 @@ int main(int argc, char** argv) {
             char input_buffer[BUFFER_LEN];
             fprintf(stdout, "%s> ", hostname);
             fgets(input_buffer, BUFFER_LEN - 1, stdin);
-            char* c = strtok(input_buffer, " ");
-            while (c) {
-                if (!strcmp(c, "image")) {
-                
-                } else if (!strcmp(c, "gps")) {
-                
-                } else if (!strcmp(c, "dgps")) {
-                
-                } else if (!strcmp(c, "lasers")) {
-                
-                } else if (!strcmp(c, "move")) {
-                    c = strtok(NULL, " ");
-                    
-                } else if (!strcmp(c, "turn")) {
-                    c = strtok(NULL, " ");
-                
-                } else if (!strcmp(c, "stop")) {
-                
-                } else if (!strcmp(c, "quit")) {
-                
-                } else if (!strcmp(c, "help")) {
-                    fputs("commands:\n"
-                          "  image\n"
-                          "  gps\n"
-                          "  dgps\n"
-                          "  lasers\n"
-                          "  move\n"
-                          "  turn\n"
-                          "  stop\n"
-                          "  quit\n"
-                          "  help\n", stdout);
-                }
+            char* c = strtok(input_buffer, " \n");
+            fprintf(stdout, "got [%s]\n", c);
+            if (!strcmp(c, "image")) {
+              get_thing(sock, serv_addr, password, IMAGE);
+            } else if (!strcmp(c, "gps")) {
+              get_thing(sock, serv_addr, password, GPS);
+            } else if (!strcmp(c, "dgps")) {
+              get_thing(sock, serv_addr, password, dGPS);
+            } else if (!strcmp(c, "lasers")) {
+              get_thing(sock, serv_addr, password, LASERS);
+            } else if (!strcmp(c, "move")) {
+                c = strtok(NULL, " \n");
+                send_request(sock, serv_addr, password, MOVE, atoi(c));
+            } else if (!strcmp(c, "turn")) {
+                c = strtok(NULL, " \n");
+                send_request(sock, serv_addr, password, MOVE, atoi(c));
+            } else if (!strcmp(c, "stop")) {
+              send_request(sock, serv_addr, password, STOP, 0);
+            } else if (!strcmp(c, "quit")) {
+              send_request(sock, serv_addr, password, QUIT, 0);
+            } else if (!strcmp(c, "help")) {
+                fputs("commands:\n"
+                      "  image\n"
+                      "  gps\n"
+                      "  dgps\n"
+                      "  lasers\n"
+                      "  move\n"
+                      "  turn\n"
+                      "  stop\n"
+                      "  quit\n"
+                      "  help\n", stdout);
             }
         }
     }
