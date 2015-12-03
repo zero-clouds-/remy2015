@@ -1,2 +1,2 @@
 #!/bin/bash
-./robot_client localhost 8082
+./robot_client -h localhost -p 8082 -n 4 -l 5
