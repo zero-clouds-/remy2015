@@ -1,7 +1,5 @@
 #include "../protocol/utility.h"
 #include "../protocol/udp_protocol.h"
-#include <math.h> //for PI
-#include <time.h> //for timestamp
 
 #define BUFFER_LEN 512
 #define TIMEOUT_SEC 1
