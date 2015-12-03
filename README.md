@@ -30,7 +30,8 @@ aspects of the robot's information -- such as GPS, dGPS, laser, and image data,
 and sends it to the client based on what it has requested.
 
 The client controls the robot explicitly by asking the server to move, turn, or
-stop the robot. 
+stop the robot. Commands are ordered to make a the robot draw two shapes: a polygon
+of sides N with length L, and a second polygon of sides N - 1 and length L.
 
 * Source Files:
 
@@ -49,7 +50,47 @@ stop the robot.
 -------------------------------------------------------------------------------  
 III. OTHER COMMENTS
 -------------------------------------------------------------------------------
+* Compilation:
 
+The program should be compiled using the Makefile with the following terminal
+command:
+            $ make 
+
+To remove all object files:
+
+            $ make clean
+
+* Running Programs:
+
+The following terminal lines should be used to run the programs after compilation:
+
+        Machine 1
+            $ ./server -h <hostname-of-robot> -i <robot-id> -n <robot-number> -p <port>
+        
+            -h <hostname-of-robot>: Address/Hostname of the robot to communicate with
+            -i <robot-id>: ID of robot
+            -n <robot-number>: Number of robot; used to get pictures
+            -p <port>: Port that the server will listen on for connections
+
+        Machine 2
+            $ ./client -h <hostname-of-server> -p <port> -n <number> -l <length-of-sides>
+    
+            -h <hostname-of-server>: Address/Hostname of the proxy server
+            -p <port>: Port that the proxy server is listening on
+            -n <number-of-sides>: A number between 4 and 8 (inclusively) defining the 
+            number of sides
+            -l <length-of-sides>: A number that defines the length of the sides 
+            
+
+* Default Usage: 
+
+To run the program in default mode:
+
+    Machine 1
+            $ bash run_server
+    
+    Machine 2
+            $ bash run_client
 
 -------------------------------------------------------------------------------  
 IV. KNOWN PROBLEMS
