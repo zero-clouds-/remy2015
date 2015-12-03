@@ -211,6 +211,10 @@ int main(int argc, char** argv) {
     get_thing(sock, serv_addr, password, dGPS);
     get_thing(sock, serv_addr, password, LASERS);
 
+    //example of move_robot below for N and N-1
+    //move_robot(sides, lengths, sock, serv_addr, password);
+    //move_robot(sides - 1, lengths, sock, serv_addr, password);
+
     //done requesting, quit
     send_request(sock, serv_addr, password, QUIT, 0);
 
@@ -252,7 +256,7 @@ void get_thing(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t
 * function to move robot
 */
 void move_robot(int N, int L, int sock, struct addrinfo* serv_addr, uint32_t password) {
-    //calculate metrics - we need to find out what we want
+    //calculate sleep times 
     unsigned turnSleepTime = (int)((1000000.0 * 360.0 * 7.0) / (M_PI * N)); 
     unsigned moveSleepTime = (1000000 * L);
 
