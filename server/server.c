@@ -147,8 +147,11 @@ int main(int argc, char** argv) {
         int f = 10000;
         if ((f = recvfrom(status.udp_sock, temp, BUFFER_LEN, 0,
                     (struct sockaddr *)(&status.cliaddr), &status.size)) < 0) {
-            buffer* quit_buf = create_message(0, status.password, QUIT, 0, 0, 0, 0);
-            quit(quit_buf, &status);
+            if (status.connected != 0) {
+                buffer* quit_buf = create_message(0, status.password, QUIT, 0, 0, 0, 0);
+                quit(quit_buf, &status);
+                fprintf(stdout, "Waiting for a connection\n");
+            }
         } else {
 
             // decipher message
@@ -163,7 +166,9 @@ int main(int argc, char** argv) {
             protocol_func = check_version(&msg_header) ? &protocol1:&protocol2;
             protocol_func(recv_buf, &status);
         }
-        fprintf(stdout, "Waiting for a message\n");
+        if (status.connected != 0) {
+            fprintf(stdout, "Waiting for a message\n");
+        }
         fflush(stdout);
         fflush(stderr);
     }
