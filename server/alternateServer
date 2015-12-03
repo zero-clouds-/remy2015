@@ -81,7 +81,7 @@ ssize_t udp_send(buffer* recv_buffer, server_stat* status);
 void quit(buffer* recv_buf, server_stat* status);
 int request_command(buffer* recv_buf, server_stat* status);
 int http_get_content_length(char* http_msg);
-unsigned char* http_get_data(char* http_msg, int length);
+unsigned char* http_get_data(char* http_msg);
 
 /*
 * Main function
@@ -141,6 +141,7 @@ int main(int argc, char** argv) {
     buffer* recv_buf = create_buffer(BUFFER_LEN);
     for (;;) {
 
+        timeout_setup(status.udp_sock, t_out);
         unsigned char *temp = calloc(BUFFER_LEN, 1);
         int f = 10000;
         if ((f = recvfrom(status.udp_sock, temp, BUFFER_LEN, 0,
@@ -332,10 +333,13 @@ int request_command(buffer* recv_buf, server_stat* status) {
     char* http_message;      // used to hold http message from robot
     buffer* http_data;
     unsigned char* data;     // points to the data section of http_message
-    unsigned char* itr;      // iterator pointing to beginning of next data section to be sent to client
     int n, content_len;      // length of the http data section
     header request_header;   // header from the client
     buffer* response;        // buffer to send to client
+    struct timeval timeout;
+
+    timeout.tv_sec = 1;
+    timeout.tv_usec = 0;
 
     // acknowledgement of command to client
     udp_send(recv_buf, status);
@@ -388,6 +392,7 @@ int request_command(buffer* recv_buf, server_stat* status) {
     }
 
     // send the http request
+    timeout_setup(status->r_stat.http_sock, timeout);
     write(status->r_stat.http_sock, http_message, strlen(http_message));
 
     // receive a response from the robot
@@ -410,62 +415,54 @@ int request_command(buffer* recv_buf, server_stat* status) {
     if (atoi(t) != 200) {
         fprintf(stderr, "error with http\n");
         response = create_message(0, status->password,
-                HTTP_ERROR, 0, 0,
-                0, 0);
+                HTTP_ERROR, 0, 0, 0, 0);
         udp_send(response, status);
         return 0;
     }
 
     // get length of data section of http message
-    if ((content_len = http_get_content_length(useless1)) == 0) {
-        content_len = n - (strstr(useless2, "\r\n\r\n") - useless2);
-    }
-    if ((data = http_get_data(useless2, content_len)) == NULL) {
+    content_len = http_get_content_length(useless1);
+    if ((data = http_get_data(useless2)) == NULL) {
         fprintf(stderr, "http_get_data()\n");
     }
 
     // data come out correctly here, check in while loop
-    printf("Data: %s\n", data);
+    append_buffer(http_data, data, strlen((char*)data));
 
-    // start sending data
-    itr = (unsigned char*) data;
-    int amount_to_send = content_len;
-    int header_size = data - (unsigned char*)useless2;
-    while (amount_to_send > 0) {
-        // adjust the header
-        uint32_t p_size = n - header_size;
-        printf("size to send: %d\n", p_size);
-        response = create_message(0, status->password,
-                request_header.data[UP_CLIENT_REQUEST],
-                0, (content_len - amount_to_send), content_len,
-                p_size);
-
-        // pack the header
-        fprintf(stderr, "appending %d bytes to %d bytes in %d-sized buffer\n", ((uint32_t*)(response->data))[UP_PAYLOAD_SIZE], response->len, response->size);
-
-        // pack the data
-        append_buffer(response, itr, ((uint32_t*)(response->data))[UP_PAYLOAD_SIZE]);
-        printf("Payload size is: %d\n", ((uint32_t*)(response->data))[UP_PAYLOAD_SIZE]);
-        
-        // adjust pointer and amount of data left to send
-        printf("Data section of client message: %s\n", itr);
-        amount_to_send -= ((uint32_t*)(response->data))[UP_PAYLOAD_SIZE];
-
-        // send to client
-        int num = 0;
-        while ((num += udp_send(response + num, status)) < ((uint32_t*)(response->data))[UP_PAYLOAD_SIZE]);
-        printf("size sent: %d\n", num);
-        // clean up
-        free(response);
-        memset(http_message, '\0', 1000);
-        n = read(status->r_stat.http_sock, http_message, 272);
-        printf("other data: %s\n", http_message);
-        itr = (unsigned char*)http_message;
-        header_size = 0;
-    }
     free(http_message);
+    http_message = calloc(1000, 1);
+    while ((n = read(status->r_stat.http_sock, http_message, 1000)) > 0) {
+        data = http_get_data(http_message);
+        append_buffer(http_data, data, strlen((char*)data));
+        free(http_message);
+        http_message = calloc(1000, 1);
+    }
+
+    printf("http_data: %s\n", http_data->data);
+
+    int a = 0;
+    while (a < http_data->len) {
+        response = create_message(request_header.data[UP_VERSION],
+                request_header.data[UP_IDENTIFIER],
+                request_header.data[UP_CLIENT_REQUEST],
+                request_header.data[UP_REQUEST_DATA],
+                a,
+                http_data->len,
+                ((http_data->len - a) > UP_MAX_PAYLOAD ? UP_MAX_PAYLOAD:(http_data->len - a)));
+
+        append_buffer(response, http_data->data + a, 272);
+        udp_send(response, status);
+        clear_buffer(response);
+        a += 272;
+    }
+
+    printf("are we here yet?\n");
+    free(http_message);
+    printf("are we here yet?\n");
     free(useless1);
+    printf("are we here yet?\n");
     free(useless2);
+    printf("are we here yet?\n");
     return 1;
 }
 
@@ -480,14 +477,14 @@ int http_get_content_length(char* http_msg) {
         return atoi(strtok(NULL, "\r\n"));
     }
     printf("error getting content length\n");
-    return 0;
+    return -1;
 }
 
 /* unsigned char* http_get_data
  *   char* http_msg - array containing an http response from the robot
  * Returns a pointer to the beginning of the data section of the http_message
  */
-unsigned char* http_get_data(char* http_msg, int length) {
+unsigned char* http_get_data(char* http_msg) {
     char *t = NULL;
     if ((t = strstr(http_msg, "\r\n\r\n")) != NULL) {
         t += strlen("\r\n\r\n");
