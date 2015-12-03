@@ -46,8 +46,7 @@ buffer* compile_file(int sock, struct addrinfo* serv_addr) {
     do {
         buf->len = recvfrom(sock, buf->data, buf->size, 0, (struct sockaddr*)&from_addr, &from_addrlen);
         if (buf->len < 0) error("recvfrom()");
-    
-        total_bytes_recv += buf->len;
+
         h = extract_header(buf);
         full_payload->len = h.data[UP_TOTAL_SIZE];
     
@@ -57,10 +56,10 @@ buffer* compile_file(int sock, struct addrinfo* serv_addr) {
         assemble_datagram(full_payload, buf); //in udp_protocol.c
         ++chunks;
         fprintf(stderr, "%d byte datagram received\n", buf->len);
-    
+        total_bytes_recv += h.data[UP_PAYLOAD_SIZE];
     } while (total_bytes_recv == 0 || total_bytes_recv < full_payload->len);
     
-    fprintf(stdout, "%d bytes of data received in %d chunks\n", (int)total_bytes_recv - (chunks * 28), (int)chunks);
+    fprintf(stdout, "%d bytes of data received in %d chunks\n", (int)total_bytes_recv, chunks);
     delete_buffer(buf);
     
     return full_payload;
@@ -103,64 +102,54 @@ void move_robot(int N, int L, int sock, struct addrinfo* serv_addr, uint32_t pas
 * Main function of the client to communicate with proxy.
 */
 int main(int argc, char** argv) {
-   int i, hflag, pflag, nflag, lflag; // variables for argument parsing
-    int sock,                          // udp socket to proxy
-        sides,                         // number of sides of first shape
-        lengths;                       // length of sides of shapes
-    char* port;                          // port number to connect to proxy 
-    char hostname[BUFFER_LEN];         // hostname of server
+    int i, flags;                     // variables for argument parsing
+    int sock,                         // udp socket to proxy
+        sides,                        // number of sides of first shape
+        lengths;                      // length of sides of shapes
+    char port[BUFFER_LEN];            // port number to connect to proxy 
+    char hostname[BUFFER_LEN];        // hostname of server
     struct addrinfo* serv_addr;
-    uint32_t password;                 // password required provided by server
-    char usage[BUFFER_LEN];            // how to use this program
-
+    uint32_t password;                // password required provided by server
+    char usage[BUFFER_LEN];           // how to use this program
 
     // setup basics
     hostname[0] = '\0';
     snprintf(usage, BUFFER_LEN, "usage: %s -h <udp_hostname> -p <udp_port> -n <number_of_sides> -l <length_of_sides>\n", argv[0]);
 
     // read in arguments
-    if (argc < 9) {
-        error(usage);
-    }
-/*
-    if (argc < 3) {
-        fprintf(stderr, "usage: %s udp_hostname udp_port\n", argv[0]);
-        return -1;
-    }
-*/
+    if (argc < 9) error(usage);
+
     // read in the required arguments
-    hflag = pflag = nflag = lflag = 0;
-    for (i = 1; i < argc; i += 2) {
-        if (strcmp(argv[i], "-h") == 0) {
-            strncpy(hostname, argv[i + 1], BUFFER_LEN - 1);
-            hflag = 1;
-        } else if (strcmp(argv[i], "-p") == 0) {
-            port = argv[i + 1];
-            pflag = 1;
-        } else if (strcmp(argv[i], "-n") == 0) {
-            sides = atoi(argv[i + 1]);
-            nflag = 1;
-        } else if (strcmp(argv[i], "-l") == 0) {
-            lengths = atoi(argv[i + 1]);
-            lflag = 1;
-        } else {
-            error(usage);
-        }
+    flags = 0;
+    for (i = 1; i < argc; ++i) {
+        if (argv[i][0] != '-') continue;
+        if (argv[i][1] == 'h') {
+            strncpy(hostname, argv[++i], BUFFER_LEN - 1);
+            flags |= (1 << 0);
+        } else if (argv[i][1] == 'p') {
+            strncpy(port, argv[++i], BUFFER_LEN - 1);
+            flags |= (1 << 1);
+        } else if (argv[i][1] == 'n') {
+            sides = atoi(argv[++i]);
+            flags |= (1 << 2);
+        } else if (argv[i][1] == 'l') {
+            lengths = atoi(argv[++i]);
+            flags |= (1 << 3);
+        } else if (argv[i][1] == 'i') { // interactive mode flag
+            flags |= (1 << 4);
+        } else error(usage);
     }
     
-    if (!(hflag && pflag && nflag && lflag)) {
-        error(usage);
-    }
+    if ((flags & 0xF) != 0xF) error(usage);
 
     //resolve port
     //port = atoi(argv[4]);
     if (atoi(port) == 0) error("port number");
     
-    
     //check N
-    if(sides < 4 || sides > 8) {
+    if (sides < 4 || sides > 8)
         error("parameter error with sides: 4 <= N <= 8");
-    }
+    if (lengths <= 0) error("lengths");
     
     // connect to the UDP server
     sock = connect_udp(hostname, port, &serv_addr);
@@ -175,7 +164,48 @@ int main(int argc, char** argv) {
         /* TODO: if fail somehow, call continue */
         break;
     }
-    
+
+    if ((flags & 0x10)) {
+        fputs("interactive mode (type help for list of commands)\n", stdout);
+        for (;;) {
+            char input_buffer[BUFFER_LEN];
+            fprintf(stdout, "%s> ", hostname);
+            fgets(input_buffer, BUFFER_LEN - 1, stdin);
+            char* c = strtok(input_buffer, " \n");
+            fprintf(stdout, "got [%s]\n", c);
+            if (!strcmp(c, "image")) {
+              get_thing(sock, serv_addr, password, IMAGE);
+            } else if (!strcmp(c, "gps")) {
+              get_thing(sock, serv_addr, password, GPS);
+            } else if (!strcmp(c, "dgps")) {
+              get_thing(sock, serv_addr, password, dGPS);
+            } else if (!strcmp(c, "lasers")) {
+              get_thing(sock, serv_addr, password, LASERS);
+            } else if (!strcmp(c, "move")) {
+                c = strtok(NULL, " \n");
+                send_request(sock, serv_addr, password, MOVE, atoi(c));
+            } else if (!strcmp(c, "turn")) {
+                c = strtok(NULL, " \n");
+                send_request(sock, serv_addr, password, MOVE, atoi(c));
+            } else if (!strcmp(c, "stop")) {
+              send_request(sock, serv_addr, password, STOP, 0);
+            } else if (!strcmp(c, "quit")) {
+              send_request(sock, serv_addr, password, QUIT, 0);
+            } else if (!strcmp(c, "help")) {
+                fputs("commands:\n"
+                      "  image\n"
+                      "  gps\n"
+                      "  dgps\n"
+                      "  lasers\n"
+                      "  move\n"
+                      "  turn\n"
+                      "  stop\n"
+                      "  quit\n"
+                      "  help\n", stdout);
+            }
+        }
+    }
+
     //by this point the server is waiting for what to do    
     get_thing(sock, serv_addr, password, GPS);
     get_thing(sock, serv_addr, password, dGPS);
