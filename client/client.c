@@ -59,7 +59,7 @@ buffer* compile_file(int sock, struct addrinfo* serv_addr) {
     
     } while (total_bytes_recv == 0 || total_bytes_recv < full_payload->len);
     
-    fprintf(stdout, "%d bytes of data received in %d chunks\n", total_bytes_recv - (chunks * 28), chunks);
+    fprintf(stdout, "%d bytes of data received in %d chunks\n", (int)total_bytes_recv - (chunks * 28), (int)chunks);
     delete_buffer(buf);
     
     return full_payload;
@@ -96,18 +96,17 @@ buffer* receive_request(int sock, struct addrinfo* serv_addr) {
 
 //roobot situational methods
 void get_thing(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t command);
-void send_command(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t command);
-
+void move_robot(int N, int L, int sock, struct addrinfo* serv_addr, uint32_t password);
 
 /* int main
 * Main function of the client to communicate with proxy.
 */
 int main(int argc, char** argv) {
    int i, hflag, pflag, nflag, lflag; // variables for argument parsing
-    int port,                          // port number to connect with proxy
-        sock,                          // udp socket to proxy
+    int sock,                          // udp socket to proxy
         sides,                         // number of sides of first shape
         lengths;                       // length of sides of shapes
+    char* port;                          // port number to connect to proxy 
     char hostname[BUFFER_LEN];         // hostname of server
     struct addrinfo* serv_addr;
     uint32_t password;                 // password required provided by server
@@ -128,7 +127,6 @@ int main(int argc, char** argv) {
         return -1;
     }
 */
-
     // read in the required arguments
     hflag = pflag = nflag = lflag = 0;
     for (i = 1; i < argc; i += 2) {
@@ -136,7 +134,7 @@ int main(int argc, char** argv) {
             strncpy(hostname, argv[i + 1], BUFFER_LEN - 1);
             hflag = 1;
         } else if (strcmp(argv[i], "-p") == 0) {
-            port = atoi(argv[i + 1]);
+            port = argv[i + 1];
             pflag = 1;
         } else if (strcmp(argv[i], "-n") == 0) {
             sides = atoi(argv[i + 1]);
@@ -148,18 +146,23 @@ int main(int argc, char** argv) {
             error(usage);
         }
     }
+    
     if (!(hflag && pflag && nflag && lflag)) {
         error(usage);
     }
 
-    // read in the required arguments
-    strncpy(hostname, argv[1], BUFFER_LEN - 1);
     //resolve port
-    port = atoi(argv[2]);
-    if (port == 0) error("port number");
+    //port = atoi(argv[4]);
+    if (atoi(port) == 0) error("port number");
+    
+    
+    //check N
+    if(sides < 4 || sides > 8) {
+        error("parameter error with sides: 4 <= N <= 8");
+    }
+    
     // connect to the UDP server
-
-    sock = connect_udp(hostname, argv[2], &serv_addr);
+    sock = connect_udp(hostname, port, &serv_addr);
 
     for (;;) {
         send_request(sock, serv_addr, 0, CONNECT, 0);
@@ -208,4 +211,15 @@ void get_thing(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t
     fprintf(stdout, "\n====== END DATA ======\n");
     
     delete_buffer(full_payload);
+}
+
+/*
+* function to move robot
+*/
+void move_robot(int N, int L, int sock, struct addrinfo* serv_addr, uint32_t password) {
+    //calculate metrics
+    //move robot using get_thing
+    //stop robot using get_thing
+    //turn robot using get_thing
+    //repeat until shape is drawn
 }
