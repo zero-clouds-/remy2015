@@ -345,7 +345,7 @@ void move_robot(int N, int L, int sock, struct addrinfo* serv_addr, uint32_t pas
     unsigned moveSleepTime = L;
 
     int i;
-    for(i = 0; i < 1; i++) {
+    for(i = 0; i < N; i++) {
         //move robot using get_thing
         printf("robot moving...\n");
         get_thing(sock, serv_addr, password, MOVE);
