@@ -129,7 +129,7 @@ int main(int argc, char** argv) {
     status.udp_sock = udp_server(port);
 
     // timeouts
-    t_out.tv_sec = 0;
+    t_out.tv_sec = 60;
     t_out.tv_usec = 0;
     timeout_setup(status.udp_sock, t_out);
 
@@ -146,8 +146,9 @@ int main(int argc, char** argv) {
         memset(temp, '\0', BUFFER_LEN);
         int f = 10000;
         if ((f = recvfrom(status.udp_sock, temp, BUFFER_LEN, 0,
-                    (struct sockaddr *)(&status.cliaddr), &status.size)) <= 0) {
-            fprintf(stderr, "ERROR: recvfrom()\n");
+                    (struct sockaddr *)(&status.cliaddr), &status.size)) < 0) {
+            buffer* quit_buf = create_message(0, status.password, QUIT, 0, 0, 0, 0);
+            quit(quit_buf, &status);
         } else {
 
             // decipher message
