@@ -1,5 +1,6 @@
 #include "../protocol/utility.h"
 #include "../protocol/udp_protocol.h"
+#include <math.h> //for PI
 
 #define BUFFER_LEN 512
 
@@ -196,7 +197,11 @@ int main(int argc, char** argv) {
  */
 void get_thing(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t command) {
     // GSP GET
-    send_request(sock, serv_addr, password, command, 0);
+    uint32_t data = 0;
+
+    if(command == MOVE || command == TURN) data = 1;
+
+    send_request(sock, serv_addr, password, command, data);
     buffer* buf = receive_request(sock, serv_addr);
     header h = extract_header(buf);
     
@@ -217,9 +222,25 @@ void get_thing(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t
 * function to move robot
 */
 void move_robot(int N, int L, int sock, struct addrinfo* serv_addr, uint32_t password) {
-    //calculate metrics
-    //move robot using get_thing
-    //stop robot using get_thing
-    //turn robot using get_thing
-    //repeat until shape is drawn
+    //calculate metrics - we need to find out what we want
+    unsigned turnSleepTime = (int)((1000000.0 * 360.0 * 7.0) / (M_PI * N)); 
+    unsigned moveSleepTime = (1000000 * L);
+
+    int i;
+    for(i = 0; i < N; i++) {
+        //move robot using get_thing
+        get_thing(sock, serv_addr, password, MOVE);  
+        if(usleep(moveSleepTime) < 0) error("usleep(moveSleepTime)");
+ 
+        //stop robot using get_thing
+        get_thing(sock, serv_addr, password, STOP);
+        
+        //turn robot using get_thing
+        get_thing(sock, serv_addr, password, TURN);
+        if(usleep(turnSleepTime) < 0) error("usleep(turnSleepTime)");
+
+        //stop robot again
+        get_thing(sock, serv_addr, password, STOP);
+
+    } //repeat until shape is drawn 
 }
