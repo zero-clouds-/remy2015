@@ -330,6 +330,7 @@ void quit(buffer* recv_buf, server_stat* status) {
  */
 int request_command(buffer* recv_buf, server_stat* status) {
     char* http_message;      // used to hold http message from robot
+    buffer* http_data;
     unsigned char* data;     // points to the data section of http_message
     unsigned char* itr;      // iterator pointing to beginning of next data section to be sent to client
     int n, content_len;      // length of the http data section
@@ -341,6 +342,7 @@ int request_command(buffer* recv_buf, server_stat* status) {
     request_header = extract_header(recv_buf);
 
     // create the http request
+    http_data = create_buffer(BUFFER_LEN);
     http_message = calloc(1000, 1);
     switch (request_header.data[UP_CLIENT_REQUEST]) {
         case IMAGE:
