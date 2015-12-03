@@ -15,6 +15,7 @@
 //deminsions of custom protocol
 #define UP_HEADER_LEN 28
 #define UP_MAX_PAYLOAD 272
+#define CST_MAX_PAYLOAD 250
 #define UP_VERSION 0
 #define UP_IDENTIFIER 1
 #define UP_CLIENT_REQUEST 2
@@ -47,6 +48,8 @@ header extract_header(buffer* datagram);
 void separate_datagram(buffer* dst, buffer* src, int offset, int len);
 
 void assemble_datagram(buffer* dst, buffer* src);
+
+void assemble_custom_datagram(buffer* dst, buffer* src);
 
 buffer* create_message(uint32_t version, uint32_t id, uint32_t request, uint32_t data, uint32_t offset, uint32_t total_size, uint32_t payload);
 
