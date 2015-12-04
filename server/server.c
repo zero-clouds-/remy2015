@@ -268,7 +268,7 @@ void protocol1(buffer* recv_buf, server_stat* status){
  *   server_stat* status - status and general information from the server
  */
 void protocol2(buffer* recv_buffer, server_stat* status) {
-    fprintf(stdout, "version 2 protocol\n");
+    fprintf(stdout, "\tversion 2 protocol\n");
 }
 
 void print_header(buffer* buf) {

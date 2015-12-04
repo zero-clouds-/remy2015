@@ -41,6 +41,11 @@ void assemble_datagram(buffer* dst, buffer* src) {
   memcpy(dst->data + h.data[UP_BYTE_OFFSET], src->data + UP_HEADER_LEN, h.data[UP_PAYLOAD_SIZE]);
 }
 
+void assemble_custom_datagram(buffer* dst, buffer* src) {
+  header h = extract_header(src);
+  memcpy(dst->data + (250 * h.data[UP_BYTE_OFFSET]), src->data + UP_HEADER_LEN, h.data[UP_PAYLOAD_SIZE]);
+}
+
 /* buffer * create_message
 * Create a message to send by loading a new header with parameters and returning buffer. 
 */
