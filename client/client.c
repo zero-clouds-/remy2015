@@ -152,7 +152,6 @@ int main(int argc, char** argv) {
     if ((flags & 0xF) != 0xF) error(usage);
 
     //resolve port
-    //port = atoi(argv[4]);
     if (atoi(port) == 0) error("port number");
     
     //check N
@@ -192,14 +191,14 @@ int main(int argc, char** argv) {
               get_thing(sock, serv_addr, password, LASERS);
             } else if (!strcmp(c, "move")) {
                 c = strtok(NULL, " \n");
-                send_request(sock, serv_addr, password, MOVE, atoi(c));
+                get_thing(sock, serv_addr, password, MOVE);
             } else if (!strcmp(c, "turn")) {
                 c = strtok(NULL, " \n");
-                send_request(sock, serv_addr, password, MOVE, atoi(c));
+                get_thing(sock, serv_addr, password, TURN);
             } else if (!strcmp(c, "stop")) {
-              send_request(sock, serv_addr, password, STOP, 0);
+              get_thing(sock, serv_addr, password, STOP);
             } else if (!strcmp(c, "quit")) {
-              send_request(sock, serv_addr, password, QUIT, 0);
+              get_thing(sock, serv_addr, password, QUIT);
             } else if (!strcmp(c, "help")) {
                 fputs("commands:\n"
                       "  image\n"
@@ -216,8 +215,6 @@ int main(int argc, char** argv) {
     } else {
     }
 
-    //example of move_robot below for N and N-1 - check out the first example, it works
-    //to watch the robot move: http://169.55.155.236:8081/stream?topic=/robot_11/image?width=600?height=500
     move_robot(sides, lengths, sock, serv_addr, password);
     //move_robot(sides - 1, lengths, sock, serv_addr, password);
 
@@ -241,7 +238,6 @@ void get_thing(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t
 
     if(command == MOVE || command == TURN){
         data = 1;
-        printf("move or turn command sent\n");
     }
 
     send_request(sock, serv_addr, password, command, data);
@@ -315,9 +311,12 @@ void write_data_to_file(int vertex, int sock, struct addrinfo* serv_addr, uint32
     timeinfo = localtime (&rawtime);                                                  
     strftime(time_stamp, 30, "%c",timeinfo);
     
-    filename = (char *)malloc(strlen(sensor_type) + strlen(time_stamp) + 1);
+    filename = (char *)malloc(strlen(sensor_type) + strlen(time_stamp) + 5);
     strcpy(filename, sensor_type);
     strcat(filename, time_stamp);
+
+    if(command == IMAGE) strcat(filename, ".jpeg");
+    else strcat(filename, ".txt");
  
     write_buffer(full_payload, filename);
     delete_buffer(full_payload);
@@ -326,12 +325,15 @@ void write_data_to_file(int vertex, int sock, struct addrinfo* serv_addr, uint32
 
 
 /* void write_out_sensor_data 
-* write out all sensors to a timestamped file.
+* At each vertex of the shape, the client must request and store data from the robot’s 
+* sensors.This data is to be stored in separate time stamped files for each sensor.
 */
 void write_out_sensor_data(int vertex, int sock, struct addrinfo* serv_addr, uint32_t password) {
         //first get robot to stop, and this gives us GPS data anyway
-        write_data_to_file(vertex, sock, serv_addr, password, STOP);
-        //other sensors to be added as we want them...
+          write_data_to_file(vertex, sock, serv_addr, password, STOP);
+          write_data_to_file(vertex, sock, serv_addr, password, dGPS);
+          write_data_to_file(vertex, sock, serv_addr, password, LASERS);
+  //        write_data_to_file(vertex, sock, serv_addr, password, IMAGE);    
 }
 
 
@@ -341,23 +343,26 @@ void write_out_sensor_data(int vertex, int sock, struct addrinfo* serv_addr, uin
 * at each vertex.
 */ 
 void move_robot(int N, int L, int sock, struct addrinfo* serv_addr, uint32_t password) {
-    //calculate sleep times, calculate by 1000000 to accomodate for usleep conversion 
+    /* ax * (pi/7) * seconds = (2 pi) / N / 1
+     * seconds = ((2 PI) / N) * 7 / pi
+     * seconds = 14 / N
+    */
     unsigned turnSleepTime = (int)((14.0) / (N)); 
     unsigned moveSleepTime = L;
-
+    
     int i;
     for(i = 0; i < N; i++) {
-        //move robot using get_thing
+        //move
         printf("* robot moving...\n");
         get_thing(sock, serv_addr, password, MOVE);
         if(usleep((moveSleepTime * 1000000)) < 0) 
             error("usleep(moveSleepTime)");
  
-        //stop robot using get_thing
+        //stop
         printf("* robot stoping...\n");
         get_thing(sock, serv_addr, password, STOP);
 
-        //turn robot using get_thing
+        //turn
         printf("* robot turning for %d seconds...\n", turnSleepTime); 
         get_thing(sock, serv_addr, password, TURN);
         if(usleep((turnSleepTime * 1000000)) < 0) 
