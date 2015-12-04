@@ -40,7 +40,7 @@ buffer* compile_file(int sock, struct addrinfo* serv_addr) {
     buffer* buf = create_buffer(BUFFER_LEN);
     buffer* full_payload = create_buffer(BUFFER_LEN);
     
-    header h;
+    cst_header h;
     ssize_t total_bytes_recv = 0;
 
     struct timeval timeout;
