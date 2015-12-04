@@ -26,3 +26,7 @@ robot_client: $(COBJ) $(POBJ)
 .PHONY: clean
 clean:
 	rm $(EXE) $(SOBJ) $(COBJ) $(POBJ)
+
+test:
+	cc test/server2.c team_protocol/custom_protocol.c -o test/server
+	cc team_protocol/client2.c team_protocol/custom_protocol.c -o team_protocol/client
