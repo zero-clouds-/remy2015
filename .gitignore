@@ -7,3 +7,4 @@ server/*.swp
 client/*.swp
 protocol/*.swp
 *.exe
+Vertex*
