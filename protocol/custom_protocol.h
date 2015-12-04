@@ -39,12 +39,12 @@ typedef struct cst_header_t {
   uint32_t data[5];
 } cst_header; 
 
-void insert_cvustom_header(buffer* datagram, cst_header h);
+void insert_custom_header(buffer* datagram, cst_header h);
 
 cst_header extract_custom_header(buffer* datagram);
 
 void assemble_custom_datagram(buffer* dst, buffer* src);
 
-buffer* create_cutom_message(uint32_t version, uint32_t command, uint32_t sequence, uint32_t total_size, uint32_t payload);
+buffer* create_custom_message(uint32_t version, uint32_t command, uint32_t sequence, uint32_t total_size, uint32_t payload);
 
 #endif

@@ -1,5 +1,6 @@
 #include "../protocol/utility.h"
 #include "../protocol/udp_protocol.h"
+#include "../protocol/custom_protocol.h"
 #include <time.h>
 #include <unistd.h>
 
@@ -82,6 +83,9 @@ void           quit                    (buffer* recv_buf, server_stat* status);
 int            request_command         (buffer* recv_buf, server_stat* status);
 unsigned char* http_get_data           (unsigned char* http_msg);
 
+void           print_custom_header            (buffer* buf);
+uint32_t       get_custom_command             (const cst_header* msg_header);
+int            request_custom_command         (buffer* recv_buf, server_stat* status);
 /*
 * Main function
 */
@@ -282,14 +286,14 @@ void protocol2(buffer* recv_buffer, server_stat* status) {
     // giant mess of conditionals
     fprintf(stdout, "\tversion 2 protocol\n");
     int error = 0;
-    header msg_header = extract_custom_header(recv_buf);
+    cst_header msg_header = extract_custom_header(recv_buffer);
     if (status->connected == 0) {
             if (get_custom_command(&msg_header) == CONNECT) {
                 fprintf(stdout, "\tReplying with password\n");
                 status->connected = 1;
                 msg_header.data[1] = status->password;
-                insert_custom_header(recv_buf, msg_header);
-                if (udp_send(recv_buf, status) < 0) {
+                insert_custom_header(recv_buffer, msg_header);
+                if (udp_send(recv_buffer, status) < 0) {
                     fprintf(stderr, "sendto()\n");
                 }
             } else {
@@ -308,20 +312,19 @@ void protocol2(buffer* recv_buffer, server_stat* status) {
     } else {
         
             fprintf(stdout, "\t\tReceived Message:\n");
-            print_custom_header(recv_buf);
+            print_custom_header(recv_buffer);
             switch (get_custom_command(&msg_header)) {
                 case CONNECT:
                     fprintf(stderr, "ERROR: Unexpected Command\n");
                     break;
                 case QUIT:
-                    quit(recv_buf, status);
+                    quit(recv_buffer, status);
                     timeout_setup(status->udp_sock, timeout_0);
                     break;
                 default:
-                    error = request_custom_command(recv_buf, status);
+                    error = request_custom_command(recv_buffer, status);
                     break;
             }
-        }
     }
     if (error == -2) {
         fprintf(stderr, "ERROR: Invalid client request\n");
@@ -652,10 +655,9 @@ int request_custom_command(buffer* recv_buf, server_stat* status) {
     int http_header_len = http_get_data(http_data->data) - http_data->data;
     int a = 0;
     while ((a + http_header_len) < http_data->len) {
-        response = create_message(request_header.data[CST_VERSION],
-                request_header.data[UP_COMMAND],
-                request_header.data[SEQUENCE],
-                a,
+        response = create_custom_message(request_header.data[CST_VERSION],
+                request_header.data[CST_COMMAND],
+                request_header.data[CST_SEQUENCE],
                 (http_data->len - http_header_len),
                 ((http_data->len - (a + http_header_len)) > CST_MAX_PAYLOAD ? CST_MAX_PAYLOAD:(http_data->len - (a + http_header_len))));
 

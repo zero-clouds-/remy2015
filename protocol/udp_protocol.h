@@ -14,7 +14,6 @@
 //deminsions of custom protocol
 #define UP_HEADER_LEN 28
 #define UP_MAX_PAYLOAD 272
-#define CST_MAX_PAYLOAD 250
 #define UP_VERSION 0
 #define UP_IDENTIFIER 1
 #define UP_CLIENT_REQUEST 2
