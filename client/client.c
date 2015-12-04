@@ -216,7 +216,7 @@ int main(int argc, char** argv) {
     }
 
     move_robot(sides, lengths, sock, serv_addr, password);
-    //move_robot(sides - 1, lengths, sock, serv_addr, password);
+    move_robot(sides - 1, lengths, sock, serv_addr, password);
 
     //done requesting, quit
     send_request(sock, serv_addr, password, QUIT, 0);
