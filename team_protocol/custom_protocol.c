@@ -26,13 +26,13 @@ cst_header extract_custom_header(buffer* datagram) {
 
 void assemble_custom_datagram(buffer* dst, buffer* src) {
   cst_header h = extract_header(src);
-  memcpy(dst->data + (250 * h.data[UP_BYTE_OFFSET]), src->data + CST_HEADER_LEN, h.data[CST_PAYLOAD_SIZE]);
+  memcpy(dst->data + (370 * h.data[UP_BYTE_OFFSET]), src->data + CST_HEADER_LEN, h.data[CST_PAYLOAD_SIZE]);
 }
 
 /* buffer * create_message
 * Create a message to send by loading a new header with parameters and returning buffer. 
 */
-buffer* create_cutom_message(uint32_t version, uint32_t command, uint32_t sequence, uint32_t total_size, uint32_t payload); {
+buffer* create_custom_message(uint32_t version, uint32_t command, uint32_t sequence, uint32_t total_size, uint32_t payload); {
   buffer* message = create_buffer((CST_HEADER_LEN + payload) * sizeof(unsigned char));
   uint32_t header[5];
   header[CST_VERSION] = version;
