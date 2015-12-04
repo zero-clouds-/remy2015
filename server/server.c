@@ -106,7 +106,7 @@ int main(int argc, char** argv) {
     // read in the required arguments
     iflag = hflag = pflag = 0;
     for (i = 1; i < argc; i+=2) {
-        if (strcmp(argv[i], "-i") == 0) {
+        if (strcmp(argv[i], "-n") == 0) {
             status.r_stat.id = atoi(argv[i + 1]);
             iflag = 1;
         } else if (strcmp(argv[i], "-h") == 0) {
@@ -115,7 +115,7 @@ int main(int argc, char** argv) {
         } else if (strcmp(argv[i], "-p") == 0) {
             port = argv[i + 1];
             pflag = 1;
-        } else if (strcmp(argv[i], "-n") == 0) {
+        } else if (strcmp(argv[i], "-i") == 0) {
             status.r_stat.name = argv[i + 1];
             nflag = 1;
         }else {
@@ -545,6 +545,8 @@ int request_command(buffer* recv_buf, server_stat* status) {
         a += 272;
     }
     fprintf(stdout, "\t\tRequest complete!\n");
+    memset(http_message, '\0', 1000);
+    delete_buffer(http_data);
     return 1;
 }
 
