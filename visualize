@@ -1,0 +1,3 @@
+#!/bin/bash
+visual/visualizer < taco.bell
+convert wow.ppm image.png
