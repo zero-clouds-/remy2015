@@ -2,15 +2,14 @@
 #define UDP_PROTOCOL_H
 
 #include "utility.h"
-
 #include <stdint.h>
-
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
 #include <arpa/inet.h>
-
 #include <unistd.h>
+#include <math.h>
+#include <time.h>
 
 //deminsions of custom protocol
 #define UP_HEADER_LEN 28

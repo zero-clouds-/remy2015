@@ -48,7 +48,7 @@ void resize_buffer(buffer* b, int size) {
 * Add the first len bytes of data in str to the end of the buffer.
 */
 void append_buffer(buffer* b, unsigned char const* str, int len) {
-  if (b->len + len > b->size) resize_buffer(b, b->size * 2);
+  while ((b->len + len) > b->size) resize_buffer(b, b->size * 2);
   memcpy(b->data + b->len, str, len * sizeof(unsigned char));
   b->len += len;
 }

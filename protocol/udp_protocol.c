@@ -1,15 +1,15 @@
 #include "udp_protocol.h"
 
-/*
-* 
+/* void insert_header
+* Prepends the datagram's data with given header information.
 */
 void insert_header(buffer* datagram, header h) {
   memcpy(datagram->data, h.data, UP_HEADER_LEN);
   datagram->len = UP_HEADER_LEN;
 }
 
-/*
-*
+/* header extract_header
+* Copies header information from the datagram and fills data of given header.
 */
 header extract_header(buffer* datagram) {
   header h;
@@ -17,10 +17,9 @@ header extract_header(buffer* datagram) {
   return h;
 }
 
-/*
-*
+/* void seperate_datagram
+* note that this overwrites the contents of dst; dst must be at least 316 bytes long
 */
-// note that this overwrites the contents of dst; dst must be at least 316 bytes long
 void separate_datagram(buffer* dst, buffer* src, int offset, int len) {
   header h;
   clear_buffer(dst);
@@ -32,8 +31,10 @@ void separate_datagram(buffer* dst, buffer* src, int offset, int len) {
   insert_header(dst, h);
 }
 
-/*
-* note tha src is the incoming datagram in this case
+/* void assemble_datagram
+* Given  a source adn destination, copy the payload size of the source into the 
+* data of the destination starting at the offset. 
+* NOTE: that src is the incoming datagram in this case
 */
 void assemble_datagram(buffer* dst, buffer* src) {
   header h = extract_header(src);
@@ -44,8 +45,9 @@ void assemble_custom_datagram(buffer* dst, buffer* src) {
   header h = extract_header(src);
   memcpy(dst->data + (250 * h.data[UP_BYTE_OFFSET]), src->data + UP_HEADER_LEN, h.data[UP_PAYLOAD_SIZE]);
 }
-/*
-*
+
+/* buffer * create_message
+* Create a message to send by loading a new header with parameters and returning buffer. 
 */
 buffer* create_message(uint32_t version, uint32_t id, uint32_t request, uint32_t data, uint32_t offset, uint32_t total_size, uint32_t payload) {
   buffer* message = create_buffer((UP_HEADER_LEN + payload) * sizeof(unsigned char));
