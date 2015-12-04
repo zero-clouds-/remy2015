@@ -53,7 +53,7 @@ buffer* compile_file(int sock, struct addrinfo* serv_addr) {
         buf->len = recvfrom(sock, buf->data, buf->size, 0, (struct sockaddr*)&from_addr, &from_addrlen);
         if (buf->len < 0) error("recvfrom()");
 
-        h = extract_header(buf);
+        h = extract_cst_header(buf);
         full_payload->len = h.data[UP_TOTAL_SIZE];
     
         if (full_payload->size < h.data[UP_TOTAL_SIZE])
@@ -83,7 +83,7 @@ buffer* compile_file(int sock, struct addrinfo* serv_addr) {
  * errors and dies if message could not be sent
  */
 void send_request(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t request, uint32_t data) {
-    buffer* message = create_message(1, password, request, 0, 0, 0, 0);
+    buffer* message = create_cst_message(1, password, request, 0, 0, 0, 0);
     fprintf(stdout, "sending request [%d:%d]\n", request, data);
     ssize_t bytes_sent = sendto(sock, message->data, message->len, 0, serv_addr->ai_addr, serv_addr->ai_addrlen);
     if (bytes_sent != UP_HEADER_LEN) error("sendto()");
@@ -167,7 +167,7 @@ int main(int argc, char** argv) {
     for (;;) {
         send_request(sock, serv_addr, 0, CONNECT, 0);
         buffer* buf = receive_request(sock, serv_addr);
-        header h = extract_header(buf);
+        header h = extract_cst_header(buf);
         password = h.data[UP_IDENTIFIER];
         delete_buffer(buf);
         send_request(sock, serv_addr, password, CONNECT, 0);
@@ -242,7 +242,7 @@ void get_thing(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t
 
     send_request(sock, serv_addr, password, command, data);
     buffer* buf = receive_request(sock, serv_addr);
-    header h = extract_header(buf);
+    header h = extract_cst_header(buf);
     
     if (h.data[UP_CLIENT_REQUEST] != command) error("invalid acknowledgement");
     

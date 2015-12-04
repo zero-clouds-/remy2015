@@ -1,7 +1,7 @@
 #ifndef CST_PROTOCOL_H
 #define CST_PROTOCOL_H
 
-#include "utility.h"
+#include "../protocol/utility.h"
 #include <stdint.h>
 #include <sys/types.h>
 #include <sys/socket.h>
