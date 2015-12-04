@@ -41,6 +41,6 @@ int main() {
         img.draw_circle((int)((points[i].x - minx) * 100),
                         (int)((points[i].y - miny) * 100), 5, 0xFF, 0, 0);
     }
-    img.save_to("wow.ppm");
+    img.save_to("image.ppm");
     return 0;
 }

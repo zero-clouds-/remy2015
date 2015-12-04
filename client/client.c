@@ -400,11 +400,11 @@ void move_robot(int N, int L, int sock, struct addrinfo* serv_addr, uint32_t pas
     } //repeat until shape is drawn 
     printf("* robot drew shape\n");
     
-    FILE* taco = fopen("taco.bell", "w");
+    FILE* tt = fopen("points", "w");
     for (i = 0; i < pt_count; ++i) {
-        fprintf(taco, "%lf %lf\n", points[i].x, points[i].y);
+        fprintf(tt, "%lf %lf\n", points[i].x, points[i].y);
     }
-    fclose(taco);
+    fclose(tt);
     
     
 }

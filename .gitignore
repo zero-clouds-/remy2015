@@ -8,3 +8,6 @@ client/*.swp
 protocol/*.swp
 *.exe
 Vertex*
+points
+image.ppm
+image.png
