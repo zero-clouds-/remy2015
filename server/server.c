@@ -488,18 +488,7 @@ int request_command(buffer* recv_buf, server_stat* status) {
     fprintf(stdout, "\t\tReceiving reply from server\n");
     memset(http_message, '\0', 1000);
     retries = 0;
-    while (1) {
-        n = read(status->r_stat.http_sock, (char*)http_message, 1000);
-        if (n == -1) {
-            if (retries > 2) {
-                break;
-            }
-            retries++;
-            write(status->r_stat.http_sock, (char*)http_message, strlen((char*)http_message));
-            continue;
-        } else if (n == 0) {
-            break;
-        }
+    while ((n = read(status->r_stat.http_sock, (char*)http_message, 1000)) > 0) {
         fprintf(stdout, "\t\t\tReceived %d bytes\n", n);
         append_buffer(http_data, (unsigned char*)http_message, n);
         memset(http_message, '\0', 1000);
