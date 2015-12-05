@@ -1,6 +1,8 @@
 #include "../protocol/utility.h"
 #include "../protocol/udp_protocol.h"
 
+#include <time.h>
+
 #define BUFFER_LEN 512
 #define TIMEOUT_SEC 1
 
@@ -10,6 +12,19 @@ typedef struct pt_t {
 
 int pt_count = 0;
 pt points[64];
+
+struct timespec prev_time;
+struct timespec curr_time;
+
+void check_time() {
+    prev_time = curr_time;
+    clock_gettime(CLOCK_REALTIME, &curr_time);
+}
+long get_elapsed_us() {
+    long ds = curr_time.tv_sec - prev_time.tv_sec;
+    long dns = curr_time.tv_nsec - prev_time.tv_nsec;
+    return ds * 1000000 + dns / 1000;
+}
 
 /* int connect_udp
  *   const char* hostname - hostname to connect to
@@ -253,10 +268,11 @@ void get_thing(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t
 
     send_request(sock, serv_addr, password, command, data);
     buffer* buf = receive_request(sock, serv_addr);
+    check_time();
     header h = extract_header(buf);
     
     if (h.data[UP_CLIENT_REQUEST] != command) error("invalid acknowledgement");
-    
+
     delete_buffer(buf);
     buffer* full_payload = compile_file(sock, serv_addr);
 
@@ -272,6 +288,7 @@ void get_thing(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t
     }
     
     delete_buffer(full_payload);
+    check_time();
 }
 
 /* write_data_to_file
@@ -371,8 +388,8 @@ void move_robot(int N, int L, int sock, struct addrinfo* serv_addr, uint32_t pas
      * seconds = ((2 PI) / N) * 7 / pi
      * seconds = 14 / N
     */
-    unsigned turnSleepTime = (int)((14.0) / (N)); 
-    unsigned moveSleepTime = L;
+    double turnSleepTime = 14.0 / N; 
+    int moveSleepTime = L;
     
     int i;
     write_out_sensor_data(0, sock, serv_addr, password);
@@ -380,7 +397,7 @@ void move_robot(int N, int L, int sock, struct addrinfo* serv_addr, uint32_t pas
         //move
         printf("* robot moving...\n");
         get_thing(sock, serv_addr, password, MOVE, NULL);
-        if(usleep((moveSleepTime * 1000000)) < 0) 
+        if(usleep((moveSleepTime * 1000000) - get_elapsed_us()) < 0) 
             error("usleep(moveSleepTime)");
  
         //stop robot using get_thing
@@ -388,9 +405,9 @@ void move_robot(int N, int L, int sock, struct addrinfo* serv_addr, uint32_t pas
         get_thing(sock, serv_addr, password, STOP, NULL);
 
         //turn
-        printf("* robot turning for %d seconds...\n", turnSleepTime); 
+        printf("* robot turning for %lf seconds...\n", turnSleepTime); 
         get_thing(sock, serv_addr, password, TURN, NULL);
-        if(usleep((turnSleepTime * 1000000)) < 0) 
+        if(usleep((int)(turnSleepTime * 1000000) - get_elapsed_us()) < 0) 
             error("usleep(turnSleepTime)");
 
         //stop robot again, write data to sensors
