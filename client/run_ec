@@ -1,0 +1,2 @@
+#!/bin/bash
+./extra_credit.sh -h 192.168.1.113 -p 8082 -n 4 -l 5
