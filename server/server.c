@@ -426,8 +426,8 @@ int request_command(buffer* recv_buf, server_stat* status) {
     buffer* response;        // buffer to send to client
     struct timeval timeout;
 
-    timeout.tv_sec = 1;
-    timeout.tv_usec = 0;
+    timeout.tv_sec = 0;
+    timeout.tv_usec = 500000;
 
     fprintf(stdout, "\tProcessing request\n");
 
@@ -470,7 +470,7 @@ int request_command(buffer* recv_buf, server_stat* status) {
             break;
         case STOP:
             fprintf(stdout, "\t\tContacting stop port\n");
-            snprintf((char*)http_message, 100, "GET /twist?id=%s&lx=0 HTTP/1.1\r\n\r\n", status->r_stat.name);
+            snprintf((char*)http_message, 100, "GET /twist?id=%s&lx=0&az=0 HTTP/1.1\r\n\r\n", status->r_stat.name);
             status->r_stat.http_sock = tcp_connect(status->r_stat.hostname, GPS_PORT);
             break;
         default:
