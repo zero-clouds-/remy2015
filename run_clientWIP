@@ -1,2 +1,0 @@
-#!/bin/bash
-./robot_client -h localhost -p 8082 -n 4 -l 7
