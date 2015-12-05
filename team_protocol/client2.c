@@ -1,15 +1,10 @@
 #include "../protocol/utility.h"
 #include "../protocol/udp_protocol.h"
+#include "../protocol/custom_protocol.h"
+#include <math.h> //for PI
 
 #define BUFFER_LEN 512
 #define TIMEOUT_SEC 1
-
-typedef struct pt_t {
-    double x, y;
-} pt;
-
-int pt_count = 0;
-pt points[64];
 
 /* int connect_udp
  *   const char* hostname - hostname to connect to
@@ -46,11 +41,11 @@ buffer* compile_file(int sock, struct addrinfo* serv_addr) {
     buffer* buf = create_buffer(BUFFER_LEN);
     buffer* full_payload = create_buffer(BUFFER_LEN);
     
-    header h;
+    cst_header h;
     ssize_t total_bytes_recv = 0;
 
     struct timeval timeout;
-    timeout.tv_sec = 5; // large timeout here to compensate for server having to wait for robot and then process response before sending back
+    timeout.tv_sec = TIMEOUT_SEC;
     timeout.tv_usec = 0;
     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
     
@@ -59,13 +54,13 @@ buffer* compile_file(int sock, struct addrinfo* serv_addr) {
         buf->len = recvfrom(sock, buf->data, buf->size, 0, (struct sockaddr*)&from_addr, &from_addrlen);
         if (buf->len < 0) error("recvfrom()");
 
-        h = extract_header(buf);
+        h = extract_custom_header(buf);
         full_payload->len = h.data[UP_TOTAL_SIZE];
     
         if (full_payload->size < h.data[UP_TOTAL_SIZE])
             resize_buffer(full_payload, h.data[UP_TOTAL_SIZE]);
     
-        assemble_datagram(full_payload, buf); //in udp_protocol.c
+        assemble_custom_datagram(full_payload, buf); //in udp_protocol.c
         ++chunks;
         fprintf(stderr, "%d byte datagram received\n", buf->len);
         total_bytes_recv += h.data[UP_PAYLOAD_SIZE];
@@ -89,7 +84,7 @@ buffer* compile_file(int sock, struct addrinfo* serv_addr) {
  * errors and dies if message could not be sent
  */
 void send_request(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t request, uint32_t data) {
-    buffer* message = create_message(0, password, request, data, 0, 0, 0);
+    buffer* message = create_custom_message(1, request, 0, 0, 0);
     fprintf(stdout, "sending request [%d:%d]\n", request, data);
     ssize_t bytes_sent = sendto(sock, message->data, message->len, 0, serv_addr->ai_addr, serv_addr->ai_addrlen);
     if (bytes_sent != UP_HEADER_LEN) error("sendto()");
@@ -111,14 +106,14 @@ buffer* receive_request(int sock, struct addrinfo* serv_addr) {
 }
 
 //roobot situational methods
-void get_thing(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t command, char const* filename);
+void get_thing(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t command);
 void move_robot(int N, int L, int sock, struct addrinfo* serv_addr, uint32_t password);
 
 /* int main
 * Main function of the client to communicate with proxy.
 */
 int main(int argc, char** argv) {
-    int i, flags;                     // variables for argument parsing
+    int i, flags;                     // variables for argument parsingvoid assemble_datagram(buffer* dst, buffer* src);
     int sock,                         // udp socket to proxy
         sides,                        // number of sides of first shape
         lengths;                      // length of sides of shapes
@@ -159,6 +154,7 @@ int main(int argc, char** argv) {
     if ((flags & 0xF) != 0xF) error(usage);
 
     //resolve port
+    //port = atoi(argv[4]);
     if (atoi(port) == 0) error("port number");
     
     //check N
@@ -172,7 +168,7 @@ int main(int argc, char** argv) {
     for (;;) {
         send_request(sock, serv_addr, 0, CONNECT, 0);
         buffer* buf = receive_request(sock, serv_addr);
-        header h = extract_header(buf);
+        cst_header h = extract_custom_header(buf);
         password = h.data[UP_IDENTIFIER];
         delete_buffer(buf);
         send_request(sock, serv_addr, password, CONNECT, 0);
@@ -189,27 +185,23 @@ int main(int argc, char** argv) {
             char* c = strtok(input_buffer, " \n");
             fprintf(stdout, "got [%s]\n", c);
             if (!strcmp(c, "image")) {
-                c = strtok(NULL, " \n");
-                get_thing(sock, serv_addr, password, IMAGE, c);
+              get_thing(sock, serv_addr, password, IMAGE);
             } else if (!strcmp(c, "gps")) {
-                c = strtok(NULL, " \n");
-                get_thing(sock, serv_addr, password, GPS, c);
+              get_thing(sock, serv_addr, password, GPS);
             } else if (!strcmp(c, "dgps")) {
-                c = strtok(NULL, " \n");
-                get_thing(sock, serv_addr, password, dGPS, c);
+              get_thing(sock, serv_addr, password, dGPS);
             } else if (!strcmp(c, "lasers")) {
-                c = strtok(NULL, " \n");
-                get_thing(sock, serv_addr, password, LASERS, c);
+              get_thing(sock, serv_addr, password, LASERS);
             } else if (!strcmp(c, "move")) {
                 c = strtok(NULL, " \n");
                 send_request(sock, serv_addr, password, MOVE, atoi(c));
             } else if (!strcmp(c, "turn")) {
                 c = strtok(NULL, " \n");
-                send_request(sock, serv_addr, password, TURN, atoi(c));
+                send_request(sock, serv_addr, password, MOVE, atoi(c));
             } else if (!strcmp(c, "stop")) {
-                send_request(sock, serv_addr, password, STOP, 0);
+              send_request(sock, serv_addr, password, STOP, 0);
             } else if (!strcmp(c, "quit")) {
-                send_request(sock, serv_addr, password, QUIT, 0);
+              send_request(sock, serv_addr, password, QUIT, 0);
             } else if (!strcmp(c, "help")) {
                 fputs("commands:\n"
                       "  image\n"
@@ -224,10 +216,10 @@ int main(int argc, char** argv) {
             }
         }
     } else {
+        //example of move_robot below for N and N-1
+        //move_robot(sides, lengths, sock, serv_addr, password);
+        //move_robot(sides - 1, lengths, sock, serv_addr, password);
     }
-
-    move_robot(sides, lengths, sock, serv_addr, password);
-    move_robot(sides - 1, lengths, sock, serv_addr, password);
 
     //done requesting, quit
     send_request(sock, serv_addr, password, QUIT, 0);
@@ -243,168 +235,52 @@ int main(int argc, char** argv) {
  *   uint32_t password - used by proxy to identify this client
  *   uint32_t command - request being made to the proxy
  */
-void get_thing(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t command, char const* filename) {
+void get_thing(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t command) {
     // GSP GET
     uint32_t data = 0;
 
-    if(command == MOVE || command == TURN){
-        data = 1;
-    }
+    if(command == MOVE || command == TURN) data = 1;
 
     send_request(sock, serv_addr, password, command, data);
     buffer* buf = receive_request(sock, serv_addr);
-    header h = extract_header(buf);
-    
-    if (h.data[UP_CLIENT_REQUEST] != command) error("invalid acknowledgement");
-    
-    delete_buffer(buf);
-    buffer* full_payload = compile_file(sock, serv_addr);
-
-    if (filename) {
-        FILE* fp = fopen(filename, "wb");
-        fwrite(full_payload->data, full_payload->len, 1, fp);
-        fclose(fp);
-    } else { 
-        /* just print to timestamped file */
-        fprintf(stdout, "===== BEGIN DATA =====\n");
-        fwrite(full_payload->data, full_payload->len, 1, stdout);
-        fprintf(stdout, "\n====== END DATA ======\n");
-    }
-    
-    delete_buffer(full_payload);
-}
-
-/* write_data_to_file
- *   int sock - socket to communicate over
- *   struct addrinfo* serv_addr
- *   uint32_t password - used by proxy to identify this client
- *   uint32_t command - request being made to the proxy
- *
- * writes data to a given file rather than standard out, otherwise the same as
- * getthing()  
- */
-void write_data_to_file(int vertex, int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t command) {
-    
-    uint32_t data = 0;
-    send_request(sock, serv_addr, password, command, data);
-    buffer* buf = receive_request(sock, serv_addr);
-    header h = extract_header(buf);
+    cst_header h = extract_custom_header(buf);
     
     if (h.data[UP_CLIENT_REQUEST] != command) error("invalid acknowledgement");
     
     delete_buffer(buf);
     buffer* full_payload = compile_file(sock, serv_addr);
     
-    /* print to timestamped file */
-    char * sensor_type = (char *)(malloc(16)); //max size
-    char * time_stamp = (char *)malloc(25); //format: Sun Aug 19 02:56:02 2012 = 24 chars 
-    char * filename;
-
-    switch(command) {
-        case IMAGE:
-            sprintf(sensor_type, "Vertex%d-IMAGE-", vertex);
-            break;
-        case STOP: 
-            //not technically valid, but it returns GPS anyway so 
-            //saves us from sending a redundant GPS request
-            sprintf(sensor_type, "Vertex%d-GPS-", vertex);    
-            break;
-        case GPS:
-            sprintf(sensor_type, "Vertex%d-GPS-", vertex);  
-            break;
-        case dGPS:
-            sprintf(sensor_type, "Vertex%d-dGPS-", vertex);  
-            break;
-        case LASERS:
-            sprintf(sensor_type, "Vertex%d-LASERS-", vertex);  
-            break;
-        default: error("invalid sensor");
-    }   
-
-    time_t rawtime;
-    struct tm * timeinfo;
+    /* just print to stdout for the time being */
+    fprintf(stdout, "===== BEGIN DATA =====\n");
+    fwrite(full_payload->data, full_payload->len, 1, stdout);
+    fprintf(stdout, "\n====== END DATA ======\n");
     
-    time(&rawtime);
-    timeinfo = localtime (&rawtime);                                                  
-    strftime(time_stamp, 30, "%c",timeinfo);
-    
-    filename = (char *)malloc(strlen(sensor_type) + strlen(time_stamp) + 5);
-    strcpy(filename, sensor_type);
-    strcat(filename, time_stamp);
-
-    if (command == GPS || command == STOP) {
-        char* xxx = strtok((char*)full_payload->data, ",");
-        points[pt_count].x = atof(xxx);
-        xxx = strtok(NULL, ",");
-        points[pt_count].y = atof(xxx);
-        ++pt_count;
-    }
-    if(command == IMAGE) strcat(filename, ".jpeg");
-    else strcat(filename, ".txt");
- 
-    write_buffer(full_payload, filename);
     delete_buffer(full_payload);
-    printf("%s written out...\n", sensor_type);
 }
 
-
-/* void write_out_sensor_data 
-* At each vertex of the shape, the client must request and store data from the robot’s 
-* sensors.This data is to be stored in separate time stamped files for each sensor.
+/*
+* function to move robot
 */
-void write_out_sensor_data(int vertex, int sock, struct addrinfo* serv_addr, uint32_t password) {
-        //first get robot to stop, and this gives us GPS data anyway
-          write_data_to_file(vertex, sock, serv_addr, password, STOP);
-          write_data_to_file(vertex, sock, serv_addr, password, dGPS);
-          write_data_to_file(vertex, sock, serv_addr, password, LASERS);
-  //        write_data_to_file(vertex, sock, serv_addr, password, IMAGE);    
-}
-
-
-/* void move_robot
-* Moves robot of a shape N by continually sending move, turn, and stop requests
-* to the server on one socket, over a UDP connection. Receives dGPS, GPS information
-* at each vertex.
-*/ 
 void move_robot(int N, int L, int sock, struct addrinfo* serv_addr, uint32_t password) {
-    /* ax * (pi/7) * seconds = (2 pi) / N / 1
-     * seconds = ((2 PI) / N) * 7 / pi
-     * seconds = 14 / N
-    */
-    unsigned turnSleepTime = (int)((14.0) / (N)); 
-    unsigned moveSleepTime = L;
-    
+    //calculate sleep times 
+    unsigned turnSleepTime = (int)((1000000.0 * 360.0 * 7.0) / (M_PI * N)); 
+    unsigned moveSleepTime = (1000000 * L);
+
     int i;
-    write_out_sensor_data(0, sock, serv_addr, password);
     for(i = 0; i < N; i++) {
-        //move
-        printf("* robot moving...\n");
-        get_thing(sock, serv_addr, password, MOVE, NULL);
-        if(usleep((moveSleepTime * 1000000)) < 0) 
-            error("usleep(moveSleepTime)");
+        //move robot using get_thing
+        get_thing(sock, serv_addr, password, MOVE);  
+        if(usleep(moveSleepTime) < 0) error("usleep(moveSleepTime)");
  
         //stop robot using get_thing
-        printf("* robot stopping...\n");
-        get_thing(sock, serv_addr, password, STOP, NULL);
+        get_thing(sock, serv_addr, password, STOP);
+        
+        //turn robot using get_thing
+        get_thing(sock, serv_addr, password, TURN);
+        if(usleep(turnSleepTime) < 0) error("usleep(turnSleepTime)");
 
-        //turn
-        printf("* robot turning for %d seconds...\n", turnSleepTime); 
-        get_thing(sock, serv_addr, password, TURN, NULL);
-        if(usleep((turnSleepTime * 1000000)) < 0) 
-            error("usleep(turnSleepTime)");
-
-        //stop robot again, write data to sensors
-        printf("* robot stopping, has moved %d side(s)...\n", (i + 1));
-        write_out_sensor_data((i + 1), sock, serv_addr, password);
+        //stop robot again
+        get_thing(sock, serv_addr, password, STOP);
 
     } //repeat until shape is drawn 
-    printf("* robot drew shape\n");
-    
-    FILE* tt = fopen("points", "w");
-    for (i = 0; i < pt_count; ++i) {
-        fprintf(tt, "%lf %lf\n", points[i].x, points[i].y);
-    }
-    fclose(tt);
-    
-    
 }

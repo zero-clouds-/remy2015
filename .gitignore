@@ -2,4 +2,12 @@ robot_server
 robot_client
 server/*.o
 client/*.o
+protocol/*.o
+server/*.swp
+client/*.swp
+protocol/*.swp
 *.exe
+Vertex*
+points
+image.ppm
+image.png

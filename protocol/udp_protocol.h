@@ -2,15 +2,14 @@
 #define UDP_PROTOCOL_H
 
 #include "utility.h"
-
 #include <stdint.h>
-
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
 #include <arpa/inet.h>
-
 #include <unistd.h>
+#include <math.h>
+#include <time.h>
 
 //deminsions of custom protocol
 #define UP_HEADER_LEN 28
@@ -47,6 +46,8 @@ header extract_header(buffer* datagram);
 void separate_datagram(buffer* dst, buffer* src, int offset, int len);
 
 void assemble_datagram(buffer* dst, buffer* src);
+
+void assemble_custom_datagram(buffer* dst, buffer* src);
 
 buffer* create_message(uint32_t version, uint32_t id, uint32_t request, uint32_t data, uint32_t offset, uint32_t total_size, uint32_t payload);
 

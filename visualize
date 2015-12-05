@@ -1,0 +1,3 @@
+#!/bin/bash
+visual/visualizer < points
+convert image.ppm image.png
