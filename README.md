@@ -38,12 +38,14 @@ of sides N with length L, and a second polygon of sides N - 1 and length L.
     FILE NAME           FILE DESCRIPTION
     
     client.c            requests information about robot from server
+    custom_protocol.c   provides functionality for handling protocol2 udp datagrams
+    custom_protocol.h   custom_protocol header, furnishes header dimensions and semantics
     Makefile            Makefile to compile program
     run_client          bash script to run client with default settings
     run_server          bash script to run server with default settings
     server.c            runs a tcp client and udp server
-    udp_protocol.c      provides functionality for parsing and creating udp datagrams
-    udp_protocol.c      udp_protocol header, furnishes robot commands and header info
+    udp_protocol.c      provides functionality for handling protocol1 udp datagrams
+    udp_protocol.h      udp_protocol header, furnishes robot commands and header info
     utility.c           provides functionality for creating and manipulating buffers
     utility.h           utility header
 
@@ -81,15 +83,40 @@ The following terminal lines should be used to run the programs after compilatio
             number of sides
             -l <length-of-sides>: A number that defines the length of the sides 
             
-* Default Usage: 
+            * Note, of course, both Machines can be one and the same.
 
-To run the program in default mode:
+* Custom Protocol Usage: 
 
     Machine 1
             $ bash run_server
     
-    Machine 2
+    Machine 1
             $ bash run_client
+
+    Where Machine 1 is any computer on the CS Linux cluster.
+    This runs custom by default because our client connects to
+    "local host."
+
+* Class Protocol usage:
+
+    Machine 1
+            $ bash run_server
+
+    Machine 1
+            $ bash run_client -v
+
+    Where Machine 1 is any computer on the CS Linux cluster.
+    The -v flag forces our client to not use custom protocol. 
+
+* Visualizer
+
+    To run:
+        $ bash visualizer
+        $ display image.png
+
+    To be used after the client has obtained all GPS data from the two images.
+    This produces a png impage of the robot's travels, the green dot representing
+    where the robot began.        
 
 -------------------------------------------------------------------------------  
 IV. KNOWN PROBLEMS
@@ -125,18 +152,26 @@ V. DESIGN
 -------------------------------------------------------------------------------
 * Server
 
-Long timeouts between client requests to allow for the client to sleep up to 60 seconds between commands.This is useful for long moves and turns.
+Long timeouts between client requests to allow for the client to sleep up to 60 seconds between 
+commands.This is useful for long moves and turns.
 
 A statefull design that controls what the server expects and processes.
-A disconnected state when the server is not bound to a single client. In this state the server waits for a connect request from the client, ignoring all other requests Upon receiving a connect request the server moves into a second state.
+A disconnected state when the server is not bound to a single client. In this state the server 
+waits for a connect request from the client, ignoring all other requests Upon receiving a connect 
+request the server moves into a second state.
 
-This second state has the server waiting for an ack from the client it received a connect from. Any other messages are ignored. Upon receiving the ack the server moves into its final state.
+This second state has the server waiting for an ack from the client it received a connect from. 
+Any other messages are ignored. Upon receiving the ack the server moves into its final state.
 
-The final state processes the full range of messages, less connect, and relays the clients' wishes to the robot. This state persists until either a quit message from the client is received or the client doesn't communicate with the server for a long time (currently 60 seconds).
+The final state processes the full range of messages, less connect, and relays the clients' wishes 
+to the robot. This state persists until either a quit message from the client is received or the 
+client doesn't communicate with the server for a long time (currently 60 seconds).
 
 * Client
 
-Boots up and connects to the server. After confirming the connection with the server, the client begins sending commands that will result in the robot moving in a shape based on the number of sides given to the client on startup.
+Boots up and connects to the server. After confirming the connection with the server, the client 
+begins sending commands that will result in the robot moving in a shape based on the number of 
+sides given to the client on startup.
 
 Also has an interactive mode which allows real time interaction with the robot.
 
