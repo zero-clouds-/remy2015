@@ -578,7 +578,7 @@ int request_custom_command(buffer* recv_buf, server_stat* status) {
     // create the http request
     memset(http_message, '\0', 1000);
     request_header = extract_custom_header(recv_buf);
-    switch (request_header.data[UP_CLIENT_REQUEST]) {
+    switch (request_header.data[CST_COMMAND]) {
         case IMAGE:
             fprintf(stdout, "\t\tContacting image port\n");
             snprintf((char*)http_message, 100, "GET /snapshot?topic=/robot_%d/image?width=600?height=500 HTTP/1.1\r\n\r\n", status->r_stat.id);
@@ -601,12 +601,12 @@ int request_custom_command(buffer* recv_buf, server_stat* status) {
             break;
         case MOVE:
             fprintf(stdout, "\t\tContacting move port\n");
-            snprintf((char*)http_message, 100, "GET /twist?id=%s&lx=%d HTTP/1.1\r\n\r\n", status->r_stat.name, request_header.data[UP_REQUEST_DATA]);
+            snprintf((char*)http_message, 100, "GET /twist?id=%s&lx=1 HTTP/1.1\r\n\r\n", status->r_stat.name);
             status->r_stat.http_sock = tcp_connect(status->r_stat.hostname, GPS_PORT);
             break;
         case TURN:
             fprintf(stdout, "\t\tContacting turn port\n");
-            snprintf((char*)http_message, 100, "GET /twist?id=%s&az=%d HTTP/1.1\r\n\r\n", status->r_stat.name, request_header.data[UP_REQUEST_DATA]);
+            snprintf((char*)http_message, 100, "GET /twist?id=%s&az=1 HTTP/1.1\r\n\r\n", status->r_stat.name);
             status->r_stat.http_sock = tcp_connect(status->r_stat.hostname, GPS_PORT);
             break;
         case STOP:
@@ -657,7 +657,7 @@ int request_custom_command(buffer* recv_buf, server_stat* status) {
     ret_code[3] = '\0';
     if (atoi(ret_code) != 200) {
         fprintf(stderr, "ERROR: bad http request\n");
-        response = create_custom_message(1, HTTP_ERROR, 0, 0, 0);
+        response = create_custom_message(GROUP_NUMBER, status->password, HTTP_ERROR, 0, 0, 0);
         udp_send(response, status);
         return 0;
     }
@@ -667,6 +667,7 @@ int request_custom_command(buffer* recv_buf, server_stat* status) {
     int a = 0;
     while ((a + http_header_len) < http_data->len) {
         response = create_custom_message(request_header.data[CST_VERSION],
+                request_header.data[CST_PASSWORD],
                 request_header.data[CST_COMMAND],
                 request_header.data[CST_SEQUENCE],
                 (http_data->len - http_header_len),

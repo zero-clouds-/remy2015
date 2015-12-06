@@ -1,5 +1,6 @@
 #include "../protocol/utility.h"
 #include "../protocol/udp_protocol.h"
+#include "../protocol/custom_protocol.h"
 
 #define BUFFER_LEN 512
 #define TIMEOUT_SEC 1
@@ -51,7 +52,7 @@ int connect_udp(char const* hostname, char const* port_name, struct addrinfo** s
  *   struct addrinfo* serv_addr - server information
  * Returns a buffer with data collected from server
  */
-buffer* compile_file(int sock, struct addrinfo* serv_addr) {
+buffer* compile_file(int sock, struct addrinfo* serv_addr, int version) {
     struct sockaddr_storage from_addr;
     socklen_t from_addrlen = sizeof(from_addr);
     
@@ -59,7 +60,6 @@ buffer* compile_file(int sock, struct addrinfo* serv_addr) {
     buffer* buf = create_buffer(BUFFER_LEN);
     buffer* full_payload = create_buffer(BUFFER_LEN);
     
-    header h;
     ssize_t total_bytes_recv = 0;
 
     struct timeval timeout;
@@ -72,16 +72,27 @@ buffer* compile_file(int sock, struct addrinfo* serv_addr) {
         buf->len = recvfrom(sock, buf->data, buf->size, 0, (struct sockaddr*)&from_addr, &from_addrlen);
         if (buf->len < 0) error("recvfrom()");
 
-        h = extract_header(buf);
-        full_payload->len = h.data[UP_TOTAL_SIZE];
-    
-        if (full_payload->size < h.data[UP_TOTAL_SIZE])
-            resize_buffer(full_payload, h.data[UP_TOTAL_SIZE]);
-    
-        assemble_datagram(full_payload, buf); //in udp_protocol.c
+        header h;
+        cst_header ch;
+        if (version == 0) {
+            h = extract_header(buf);
+            full_payload->len = h.data[UP_TOTAL_SIZE];
+            if (full_payload->size < h.data[UP_TOTAL_SIZE])
+                resize_buffer(full_payload, h.data[UP_TOTAL_SIZE]);
+            assemble_datagram(full_payload, buf); //in udp_protocol.c
+            total_bytes_recv += h.data[UP_PAYLOAD_SIZE];
+        }
+        else {
+            ch = extract_custom_header(buf);
+            full_payload->len = ch.data[CST_TOTAL_SIZE];
+            if (full_payload->size < ch.data[CST_TOTAL_SIZE])
+                resize_buffer(full_payload, ch.data[CST_TOTAL_SIZE]);
+            assemble_custom_datagram(full_payload, buf); //in udp_protocol.c
+            total_bytes_recv += ch.data[CST_PAYLOAD_SIZE];
+        }
+
         ++chunks;
         fprintf(stderr, "%d byte datagram received\n", buf->len);
-        total_bytes_recv += h.data[UP_PAYLOAD_SIZE];
     } while (total_bytes_recv == 0 || total_bytes_recv < full_payload->len);
     
     timeout.tv_sec = 0;
@@ -102,10 +113,12 @@ buffer* compile_file(int sock, struct addrinfo* serv_addr) {
  * errors and dies if message could not be sent
  */
 void send_request(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t request, uint32_t data, uint32_t version) {
-    buffer* message = create_message(version, password, request, data, 0, 0, 0);
+    buffer* message;
+    if (version == 0) message = create_message(0, password, request, data, 0, 0, 0);
+    else message = create_custom_message(GROUP_NUMBER, password, request, 0, 0, 0);
     fprintf(stdout, "sending request [%d:%d]\n", request, data);
     ssize_t bytes_sent = sendto(sock, message->data, message->len, 0, serv_addr->ai_addr, serv_addr->ai_addrlen);
-    if (bytes_sent != UP_HEADER_LEN) error("sendto()");
+    if (bytes_sent != message->len) error("sendto()");
 }
 
 /* buffer* receive_request
@@ -267,16 +280,16 @@ void get_thing(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t
     if(command == MOVE || command == TURN){
         data = 1;
     }
+    check_time();
 
     send_request(sock, serv_addr, password, command, data, version);
     buffer* buf = receive_request(sock, serv_addr);
-    check_time();
     header h = extract_header(buf);
     
     if (h.data[UP_CLIENT_REQUEST] != command) error("invalid acknowledgement");
 
     delete_buffer(buf);
-    buffer* full_payload = compile_file(sock, serv_addr);
+    buffer* full_payload = compile_file(sock, serv_addr, version);
 
     if (filename) {
         FILE* fp = fopen(filename, "wb");
@@ -312,7 +325,7 @@ void write_data_to_file(int vertex, int sock, struct addrinfo* serv_addr, uint32
     if (h.data[UP_CLIENT_REQUEST] != command) error("invalid acknowledgement");
     
     delete_buffer(buf);
-    buffer* full_payload = compile_file(sock, serv_addr);
+    buffer* full_payload = compile_file(sock, serv_addr, version);
     
     /* print to timestamped file */
     char * sensor_type = (char *)(malloc(16)); //max size

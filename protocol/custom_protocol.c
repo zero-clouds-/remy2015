@@ -32,11 +32,17 @@ void assemble_custom_datagram(buffer* dst, buffer* src) {
 /* buffer * create_message
 * Create a message to send by loading a new header with parameters and returning buffer. 
 */
-buffer* create_custom_message(uint32_t version, uint32_t command, uint32_t sequence, uint32_t total_size, uint32_t payload) {
+buffer* create_custom_message(uint32_t version, uint32_t password, uint32_t command, uint32_t sequence, uint32_t total_size, uint32_t payload) {
   buffer* message = create_buffer((CST_HEADER_LEN + payload) * sizeof(unsigned char));
-  uint32_t header[5];
+  uint32_t header[6];
   header[CST_VERSION] = version;
+  header[CST_PASSWORD] = password;
   header[CST_COMMAND] = command;
+  if (command == DATA) {
+    memcpy(message->data, header, 3);
+    message->len = 3;
+    return message;
+  }
   header[CST_SEQUENCE] = sequence;
   header[CST_TOTAL_SIZE] = total_size;
   header[CST_PAYLOAD_SIZE] = payload;

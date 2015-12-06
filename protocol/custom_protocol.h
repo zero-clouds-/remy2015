@@ -14,11 +14,12 @@
 //deminsions of custom protocol
 #define CST_MAX_PAYLOAD 370
 #define CST_VERSION 0
-#define CST_COMMAND 1
-#define CST_SEQUENCE 2
-#define CST_TOTAL_SIZE 3
-#define CST_PAYLOAD_SIZE 4
-#define CST_HEADER_LEN 20
+#define CST_PASSWORD 1
+#define CST_COMMAND 2
+#define CST_SEQUENCE 3
+#define CST_TOTAL_SIZE 4
+#define CST_PAYLOAD_SIZE 5
+#define CST_HEADER_LEN 24
 
 // valid command encodings
 #define CONNECT      0
@@ -35,8 +36,10 @@
 #define HTTP_ERROR   512
 #define DATA         1337
 
+#define GROUP_NUMBER 11
+
 typedef struct cst_header_t {
-  uint32_t data[5];
+  uint32_t data[6];
 } cst_header; 
 
 void insert_custom_header(buffer* datagram, cst_header h);
@@ -45,6 +48,6 @@ cst_header extract_custom_header(buffer* datagram);
 
 void assemble_custom_datagram(buffer* dst, buffer* src);
 
-buffer* create_custom_message(uint32_t version, uint32_t command, uint32_t sequence, uint32_t total_size, uint32_t payload);
+buffer* create_custom_message(uint32_t version, uint32_t password, uint32_t command, uint32_t sequence, uint32_t total_size, uint32_t payload);
 
 #endif
