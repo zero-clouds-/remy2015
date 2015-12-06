@@ -1,8 +1,6 @@
 #include "../protocol/utility.h"
 #include "../protocol/udp_protocol.h"
 
-#include <time.h>
-
 #define BUFFER_LEN 512
 #define TIMEOUT_SEC 1
 
