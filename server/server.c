@@ -668,7 +668,7 @@ int request_custom_command(buffer* recv_buf, server_stat* status) {
     while ((a + http_header_len) < http_data->len) {
         response = create_custom_message(request_header.data[CST_VERSION],
                 request_header.data[CST_PASSWORD],
-                request_header.data[CST_COMMAND],
+                request_header.data[DATA],
                 request_header.data[CST_SEQUENCE],
                 (http_data->len - http_header_len),
                 ((http_data->len - (a + http_header_len)) > CST_MAX_PAYLOAD ? CST_MAX_PAYLOAD:(http_data->len - (a + http_header_len))));
