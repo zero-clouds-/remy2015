@@ -138,7 +138,7 @@ int main(int argc, char** argv) {
     char port[BUFFER_LEN];            // port number to connect to proxy 
     char hostname[BUFFER_LEN];        // hostname of server
     struct addrinfo* serv_addr;
-    uint32_t version;
+    uint32_t version = 0;
     uint32_t password;                // password required provided by server
     char usage[BUFFER_LEN];           // how to use this program
 
@@ -168,7 +168,7 @@ int main(int argc, char** argv) {
         } else if (argv[i][1] == 'i') { // interactive mode flag
             flags |= (1 << 4);
         } else if (argv[i][1] == 'v') {
-            version = atoi(argv[++i]);
+            version = 0;
             flags |= (1 << 5);
         } else error(usage);
     }
