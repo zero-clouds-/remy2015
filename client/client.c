@@ -1,8 +1,6 @@
 #include "../protocol/utility.h"
 #include "../protocol/udp_protocol.h"
 
-#include <time.h>
-
 #define BUFFER_LEN 512
 #define TIMEOUT_SEC 1
 
@@ -103,8 +101,8 @@ buffer* compile_file(int sock, struct addrinfo* serv_addr) {
  *   uint32_t data - any data that request requires (MOVE/TURN rate)
  * errors and dies if message could not be sent
  */
-void send_request(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t request, uint32_t data) {
-    buffer* message = create_message(0, password, request, data, 0, 0, 0);
+void send_request(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t request, uint32_t data, uint32_t version) {
+    buffer* message = create_message(version, password, request, data, 0, 0, 0);
     fprintf(stdout, "sending request [%d:%d]\n", request, data);
     ssize_t bytes_sent = sendto(sock, message->data, message->len, 0, serv_addr->ai_addr, serv_addr->ai_addrlen);
     if (bytes_sent != UP_HEADER_LEN) error("sendto()");
@@ -126,8 +124,8 @@ buffer* receive_request(int sock, struct addrinfo* serv_addr) {
 }
 
 //roobot situational methods
-void get_thing(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t command, char const* filename);
-void move_robot(int N, int L, int sock, struct addrinfo* serv_addr, uint32_t password);
+void get_thing(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t command, char const* filename, uint32_t version);
+void move_robot(int N, int L, int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t version);
 
 /* int main
 * Main function of the client to communicate with proxy.
@@ -140,6 +138,7 @@ int main(int argc, char** argv) {
     char port[BUFFER_LEN];            // port number to connect to proxy 
     char hostname[BUFFER_LEN];        // hostname of server
     struct addrinfo* serv_addr;
+    uint32_t version;
     uint32_t password;                // password required provided by server
     char usage[BUFFER_LEN];           // how to use this program
 
@@ -168,6 +167,9 @@ int main(int argc, char** argv) {
             flags |= (1 << 3);
         } else if (argv[i][1] == 'i') { // interactive mode flag
             flags |= (1 << 4);
+        } else if (argv[i][1] == 'v') {
+            version = atoi(argv[++i]);
+            flags |= (1 << 5);
         } else error(usage);
     }
     
@@ -185,12 +187,12 @@ int main(int argc, char** argv) {
     sock = connect_udp(hostname, port, &serv_addr);
 
     for (;;) {
-        send_request(sock, serv_addr, 0, CONNECT, 0);
+        send_request(sock, serv_addr, 0, CONNECT, 0, version);
         buffer* buf = receive_request(sock, serv_addr);
         header h = extract_header(buf);
         password = h.data[UP_IDENTIFIER];
         delete_buffer(buf);
-        send_request(sock, serv_addr, password, CONNECT, 0);
+        send_request(sock, serv_addr, password, CONNECT, 0, version);
         /* TODO: if fail somehow, call continue */
         break;
     }
@@ -205,26 +207,26 @@ int main(int argc, char** argv) {
             fprintf(stdout, "got [%s]\n", c);
             if (!strcmp(c, "image")) {
                 c = strtok(NULL, " \n");
-                get_thing(sock, serv_addr, password, IMAGE, c);
+                get_thing(sock, serv_addr, password, IMAGE, c, version);
             } else if (!strcmp(c, "gps")) {
                 c = strtok(NULL, " \n");
-                get_thing(sock, serv_addr, password, GPS, c);
+                get_thing(sock, serv_addr, password, GPS, c, version);
             } else if (!strcmp(c, "dgps")) {
                 c = strtok(NULL, " \n");
-                get_thing(sock, serv_addr, password, dGPS, c);
+                get_thing(sock, serv_addr, password, dGPS, c, version);
             } else if (!strcmp(c, "lasers")) {
                 c = strtok(NULL, " \n");
-                get_thing(sock, serv_addr, password, LASERS, c);
+                get_thing(sock, serv_addr, password, LASERS, c, version);
             } else if (!strcmp(c, "move")) {
                 c = strtok(NULL, " \n");
-                send_request(sock, serv_addr, password, MOVE, atoi(c));
+                send_request(sock, serv_addr, password, MOVE, atoi(c), version);
             } else if (!strcmp(c, "turn")) {
                 c = strtok(NULL, " \n");
-                send_request(sock, serv_addr, password, TURN, atoi(c));
+                send_request(sock, serv_addr, password, TURN, atoi(c), version);
             } else if (!strcmp(c, "stop")) {
-                send_request(sock, serv_addr, password, STOP, 0);
+                send_request(sock, serv_addr, password, STOP, 0, version);
             } else if (!strcmp(c, "quit")) {
-                send_request(sock, serv_addr, password, QUIT, 0);
+                send_request(sock, serv_addr, password, QUIT, 0, version);
             } else if (!strcmp(c, "help")) {
                 fputs("commands:\n"
                       "  image\n"
@@ -241,11 +243,11 @@ int main(int argc, char** argv) {
     } else {
     }
 
-    move_robot(sides, lengths, sock, serv_addr, password);
-    move_robot(sides - 1, lengths, sock, serv_addr, password);
+    move_robot(sides, lengths, sock, serv_addr, password, version);
+    move_robot(sides - 1, lengths, sock, serv_addr, password, version);
 
     //done requesting, quit
-    send_request(sock, serv_addr, password, QUIT, 0);
+    send_request(sock, serv_addr, password, QUIT, 0, version);
 
     close(sock);
     freeaddrinfo(serv_addr);
@@ -258,7 +260,7 @@ int main(int argc, char** argv) {
  *   uint32_t password - used by proxy to identify this client
  *   uint32_t command - request being made to the proxy
  */
-void get_thing(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t command, char const* filename) {
+void get_thing(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t command, char const* filename, uint32_t version) {
     // GSP GET
     uint32_t data = 0;
 
@@ -266,7 +268,7 @@ void get_thing(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t
         data = 1;
     }
 
-    send_request(sock, serv_addr, password, command, data);
+    send_request(sock, serv_addr, password, command, data, version);
     buffer* buf = receive_request(sock, serv_addr);
     check_time();
     header h = extract_header(buf);
@@ -300,10 +302,10 @@ void get_thing(int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t
  * writes data to a given file rather than standard out, otherwise the same as
  * getthing()  
  */
-void write_data_to_file(int vertex, int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t command) {
+void write_data_to_file(int vertex, int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t command, uint32_t version) {
     
     uint32_t data = 0;
-    send_request(sock, serv_addr, password, command, data);
+    send_request(sock, serv_addr, password, command, data, version);
     buffer* buf = receive_request(sock, serv_addr);
     header h = extract_header(buf);
     
@@ -369,11 +371,11 @@ void write_data_to_file(int vertex, int sock, struct addrinfo* serv_addr, uint32
 * At each vertex of the shape, the client must request and store data from the robot’s 
 * sensors.This data is to be stored in separate time stamped files for each sensor.
 */
-void write_out_sensor_data(int vertex, int sock, struct addrinfo* serv_addr, uint32_t password) {
+void write_out_sensor_data(int vertex, int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t version) {
         //first get robot to stop, and this gives us GPS data anyway
-          write_data_to_file(vertex, sock, serv_addr, password, STOP);
-          write_data_to_file(vertex, sock, serv_addr, password, dGPS);
-          write_data_to_file(vertex, sock, serv_addr, password, LASERS);
+          write_data_to_file(vertex, sock, serv_addr, password, STOP, version);
+          write_data_to_file(vertex, sock, serv_addr, password, dGPS, version);
+          write_data_to_file(vertex, sock, serv_addr, password, LASERS, version);
   //        write_data_to_file(vertex, sock, serv_addr, password, IMAGE);    
 }
 
@@ -383,7 +385,7 @@ void write_out_sensor_data(int vertex, int sock, struct addrinfo* serv_addr, uin
 * to the server on one socket, over a UDP connection. Receives dGPS, GPS information
 * at each vertex.
 */ 
-void move_robot(int N, int L, int sock, struct addrinfo* serv_addr, uint32_t password) {
+void move_robot(int N, int L, int sock, struct addrinfo* serv_addr, uint32_t password, uint32_t version) {
     /* ax * (pi/7) * seconds = (2 pi) / N / 1
      * seconds = ((2 PI) / N) * 7 / pi
      * seconds = 14 / N
@@ -392,27 +394,27 @@ void move_robot(int N, int L, int sock, struct addrinfo* serv_addr, uint32_t pas
     int moveSleepTime = L;
     
     int i;
-    write_out_sensor_data(0, sock, serv_addr, password);
+    write_out_sensor_data(0, sock, serv_addr, password, version);
     for(i = 0; i < N; i++) {
         //move
         printf("* robot moving...\n");
-        get_thing(sock, serv_addr, password, MOVE, NULL);
+        get_thing(sock, serv_addr, password, MOVE, NULL, version);
         if(usleep((moveSleepTime * 1000000) - get_elapsed_us()) < 0) 
             error("usleep(moveSleepTime)");
  
         //stop robot using get_thing
         printf("* robot stopping...\n");
-        get_thing(sock, serv_addr, password, STOP, NULL);
+        get_thing(sock, serv_addr, password, STOP, NULL, version);
 
         //turn
         printf("* robot turning for %lf seconds...\n", turnSleepTime); 
-        get_thing(sock, serv_addr, password, TURN, NULL);
+        get_thing(sock, serv_addr, password, TURN, NULL, version);
         if(usleep((int)(turnSleepTime * 1000000) - get_elapsed_us()) < 0) 
             error("usleep(turnSleepTime)");
 
         //stop robot again, write data to sensors
         printf("* robot stopping, has moved %d side(s)...\n", (i + 1));
-        write_out_sensor_data((i + 1), sock, serv_addr, password);
+        write_out_sensor_data((i + 1), sock, serv_addr, password, version);
 
     } //repeat until shape is drawn 
     printf("* robot drew shape\n");

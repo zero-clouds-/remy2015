@@ -1,8 +1,6 @@
 #include "../protocol/utility.h"
 #include "../protocol/udp_protocol.h"
 #include "../protocol/custom_protocol.h"
-#include <time.h>
-#include <unistd.h>
 
 // robot ports
 #define IMAGE_PORT  8081
@@ -178,6 +176,14 @@ int main(int argc, char** argv) {
     return 0;
 }
 
+
+int send_error(server_stat* status, int error_code) {
+    buffer* e_msg = create_message(0, status->password, (uint32_t)error_code,
+            0, 0, 0, 0);
+    return udp_send(e_msg, status);
+}
+
+
 int timeout_setup(int socket, struct timeval timeout) {
     if (setsockopt (socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout,
                 sizeof(timeout)) < 0) {
@@ -224,6 +230,7 @@ void protocol1(buffer* recv_buf, server_stat* status){
                 }
             } else {
                 fprintf(stderr, "ERROR: Unexpected Command\n");
+                error = -2;
             }
         } else {
             fprintf(stderr, "ERROR: Incorrect Password\n");
@@ -236,19 +243,23 @@ void protocol1(buffer* recv_buf, server_stat* status){
                 fprintf(stdout, "\tConnected to a client\n");
             } else {
                 fprintf(stderr, "ERROR: Unexpected Command\n");
+                error = -2;
             }
         } else {
             fprintf(stderr, "ERROR: Incorrect Password\n");
+            error = -2;
         }
     } else {
         if (!check_pass(&msg_header, status->password)) {
             fprintf(stderr, "ERROR: Incorrect Password\n");
+                error = -2;
         } else {
             fprintf(stdout, "\t\tReceived Message:\n");
             print_header(recv_buf);
             switch (get_command(&msg_header)) {
                 case CONNECT:
                     fprintf(stderr, "ERROR: Unexpected Command\n");
+                error = -2;
                     break;
                 case QUIT:
                     quit(recv_buf, status);
@@ -262,8 +273,10 @@ void protocol1(buffer* recv_buf, server_stat* status){
     }
     if (error == -2) {
         fprintf(stderr, "ERROR: Invalid client request\n");
+        send_error(status, CLIENT_ERROR);
     } else if (error == -1) {
         fprintf(stderr, "ERROR: Problem with http response\n");
+        send_error(status, HTTP_ERROR);
     }
 }
 
@@ -272,8 +285,7 @@ void protocol1(buffer* recv_buf, server_stat* status){
  *   server_stat* status - status and general information from the server
  */
 void protocol2(buffer* recv_buffer, server_stat* status) {
-    
-      struct timeval timeout;
+    struct timeval timeout;
     struct timeval timeout_0;
     // timeouts
     timeout.tv_sec = 1;
@@ -287,49 +299,58 @@ void protocol2(buffer* recv_buffer, server_stat* status) {
     fprintf(stdout, "\tversion 2 protocol\n");
     int error = 0;
     cst_header msg_header = extract_custom_header(recv_buffer);
-    if (status->connected == 0) {
-            if (get_custom_command(&msg_header) == CONNECT) {
-                fprintf(stdout, "\tReplying with password\n");
-                status->connected = 1;
-                msg_header.data[1] = status->password;
-                insert_custom_header(recv_buffer, msg_header);
-                if (udp_send(recv_buffer, status) < 0) {
-                    fprintf(stderr, "sendto()\n");
-                }
-            } else {
-                fprintf(stderr, "ERROR: Unexpected Command\n");
+
+    if (msg_header.data[CST_VERSION] != 11) {
+        fprintf(stderr, "ERROR: incorrect version\n");
+        error = -2;
+    } else if (status->connected == 0) {
+        if (get_custom_command(&msg_header) == CONNECT) {
+            fprintf(stdout, "\tReplying with password\n");
+            status->connected = 1;
+            msg_header.data[1] = status->password;
+            insert_custom_header(recv_buffer, msg_header);
+            if (udp_send(recv_buffer, status) < 0) {
+                fprintf(stderr, "sendto()\n");
             }
+        } else {
+            fprintf(stderr, "ERROR: Unexpected Command\n");
+            error = -2;
+        }
         
     } else if (status->connected == 1) {
-            if (get_custom_command(&msg_header) == CONNECT) {
-                status->connected = 2;
-                timeout_setup(status->udp_sock, timeout_0);
-                fprintf(stdout, "\tConnected to a client\n");
-            } else {
-                fprintf(stderr, "ERROR: Unexpected Command\n");
-            }
+        if (get_custom_command(&msg_header) == CONNECT) {
+            status->connected = 2;
+            timeout_setup(status->udp_sock, timeout_0);
+            fprintf(stdout, "\tConnected to a client\n");
+        } else {
+            fprintf(stderr, "ERROR: Unexpected Command\n");
+            error= -2;
+        }
         
     } else {
-        
-            fprintf(stdout, "\t\tReceived Message:\n");
-            print_custom_header(recv_buffer);
-            switch (get_custom_command(&msg_header)) {
-                case CONNECT:
-                    fprintf(stderr, "ERROR: Unexpected Command\n");
-                    break;
-                case QUIT:
-                    quit(recv_buffer, status);
-                    timeout_setup(status->udp_sock, timeout_0);
-                    break;
-                default:
-                    error = request_custom_command(recv_buffer, status);
-                    break;
-            }
+    
+        fprintf(stdout, "\t\tReceived Message:\n");
+        print_custom_header(recv_buffer);
+        switch (get_custom_command(&msg_header)) {
+            case CONNECT:
+                fprintf(stderr, "ERROR: Unexpected Command\n");
+                error = -2;
+                break;
+            case QUIT:
+                quit(recv_buffer, status);
+                timeout_setup(status->udp_sock, timeout_0);
+                break;
+            default:
+                error = request_custom_command(recv_buffer, status);
+                break;
+        }
     }
     if (error == -2) {
         fprintf(stderr, "ERROR: Invalid client request\n");
+        send_error(status, CLIENT_ERROR);
     } else if (error == -1) {
         fprintf(stderr, "ERROR: Problem with http response\n");
+        send_error(status, HTTP_ERROR);
     }
 }
 
@@ -421,7 +442,7 @@ void quit(buffer* recv_buf, server_stat* status) {
 int request_command(buffer* recv_buf, server_stat* status) {
     unsigned char http_message[1000];      // used to hold http message from robot
     buffer* http_data = create_buffer(BUFFER_LEN);
-    int n, retries;
+    int n;
     header request_header;   // header from the client
     buffer* response;        // buffer to send to client
     struct timeval timeout;
@@ -487,7 +508,6 @@ int request_command(buffer* recv_buf, server_stat* status) {
     // read http message into a buffer
     fprintf(stdout, "\t\tReceiving reply from server\n");
     memset(http_message, '\0', 1000);
-    retries = 0;
     while ((n = read(status->r_stat.http_sock, (char*)http_message, 1000)) > 0) {
         fprintf(stdout, "\t\t\tReceived %d bytes\n", n);
         append_buffer(http_data, (unsigned char*)http_message, n);
@@ -547,8 +567,8 @@ int request_custom_command(buffer* recv_buf, server_stat* status) {
     buffer* response;        // buffer to send to client
     struct timeval timeout;
 
-    timeout.tv_sec = 1;
-    timeout.tv_usec = 0;
+    timeout.tv_sec = 0;
+    timeout.tv_usec = 500000;
 
     fprintf(stdout, "\tProcessing request\n");
 
