@@ -188,3 +188,31 @@ execute moves and turns.
 
 This hides a great deal of the complexity in the function move_robot, allowing
 the user to understand what is going on without reading every function to boot.
+
+ * Custom Protocol
+ 
+For our custom protocol the biggest difference from the class protocol was the use of a variable size header.
+The header is always 3 bytes long. These bytes are, in order:
+
+Protocol Identifier
+Password
+Command
+
+However, if the Command byte specifies DATA then the remaining three bytes are read. These bytes are, in order:
+
+Sequence
+Total Size
+Payload Size
+
+So, when communicating with the server the client first sends a connect request to the server.
+The server responded with anacknowledgement specifying a password.
+The password is then used to ensure stability for the rest of the session.
+The client then sends another packet specifying what action it would like the server to do and the server does so.
+The server then awaits for the next command.
+If the request requires data being sent back, however, the server will respond
+with said data in a packet that specifies "DATA" in the command slot of the header.
+This lets the client know that it needs to check the rest of the header.
+This protocol also uses a sequence bit instead of an offset,
+allowing memerory writes to start every 370 bytes. Which 370 byte mark to start writing at is 
+calculated by multiplying the sequence byte data by 370 and then writing the contents of the payload from there forward.
+
