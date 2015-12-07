@@ -151,7 +151,7 @@ int main(int argc, char** argv) {
     char port[BUFFER_LEN];            // port number to connect to proxy 
     char hostname[BUFFER_LEN];        // hostname of server
     struct addrinfo* serv_addr;
-    uint32_t version = 0;
+    uint32_t version = 11;
     uint32_t password;                // password required provided by server
     char usage[BUFFER_LEN];           // how to use this program
 
@@ -358,10 +358,21 @@ void write_data_to_file(int vertex, int sock, struct addrinfo* serv_addr, uint32
     
     time(&rawtime);
     timeinfo = localtime (&rawtime);                                                  
-    strftime(time_stamp, 30, "%c",timeinfo);
-    
-    filename = (char *)malloc(strlen(sensor_type) + strlen(time_stamp) + 5);
-    strcpy(filename, sensor_type);
+    strftime(time_stamp, 30, "%Y-%m-%d_%X",timeinfo);
+
+
+    //version 11 must have group's name prepended to filename
+    if(version == 11) {
+        filename = (char *)malloc(strlen(sensor_type) + strlen(time_stamp) + 13);
+        strcpy(filename, "Group11-");
+        strcat(filename, sensor_type);   
+    }    
+    else if (version == 0){
+        filename = (char *)malloc(strlen(sensor_type) + strlen(time_stamp) + 5);
+        strcpy(filename, sensor_type);   
+    }
+    else error("improper version, cannot write file");
+
     strcat(filename, time_stamp);
 
     if (command == GPS || command == STOP) {
@@ -376,7 +387,7 @@ void write_data_to_file(int vertex, int sock, struct addrinfo* serv_addr, uint32
  
     write_buffer(full_payload, filename);
     delete_buffer(full_payload);
-    printf("%s written out...\n", sensor_type);
+    printf("%s written out...\n", filename);
 }
 
 
@@ -389,7 +400,7 @@ void write_out_sensor_data(int vertex, int sock, struct addrinfo* serv_addr, uin
           write_data_to_file(vertex, sock, serv_addr, password, STOP, version);
           write_data_to_file(vertex, sock, serv_addr, password, dGPS, version);
           write_data_to_file(vertex, sock, serv_addr, password, LASERS, version);
-  //        write_data_to_file(vertex, sock, serv_addr, password, IMAGE);    
+          write_data_to_file(vertex, sock, serv_addr, password, IMAGE, version);    
 }
 
 
@@ -436,7 +447,5 @@ void move_robot(int N, int L, int sock, struct addrinfo* serv_addr, uint32_t pas
     for (i = 0; i < pt_count; ++i) {
         fprintf(tt, "%lf %lf\n", points[i].x, points[i].y);
     }
-    fclose(tt);
-    
-    
+    fclose(tt);  
 }
