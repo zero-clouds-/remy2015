@@ -400,7 +400,7 @@ void write_out_sensor_data(int vertex, int sock, struct addrinfo* serv_addr, uin
           write_data_to_file(vertex, sock, serv_addr, password, STOP, version);
           write_data_to_file(vertex, sock, serv_addr, password, dGPS, version);
           write_data_to_file(vertex, sock, serv_addr, password, LASERS, version);
-          write_data_to_file(vertex, sock, serv_addr, password, IMAGE);    
+          write_data_to_file(vertex, sock, serv_addr, password, IMAGE, version);    
 }
 
 
